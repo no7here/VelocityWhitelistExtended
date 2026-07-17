@@ -60,7 +60,7 @@ public class Configuration
 
 			Map<String, Object> newOptions = Maps.newLinkedHashMap();
 			newOptions.put("version", 2);
-			newOptions.put("identify_mode", "uuid"); // tracking mode defaulted to uuid
+			newOptions.put("identify_mode", Optional.ofNullable(this.options.get("identify_mode")).orElse("name"));
 			newOptions.put("whitelist_enabled", Optional.ofNullable(this.options.get("whitelist_enabled")).orElse(Optional.ofNullable(this.options.get("enabled")).orElse(true)));
 			newOptions.put("whitelist_kick_message", Optional.ofNullable(this.options.get("whitelist_kick_message")).orElse(Optional.ofNullable(this.options.get("kick_message")).orElse("You are not in the whitelist!")));
 			newOptions.put("blacklist_enabled", Optional.ofNullable(this.options.get("blacklist_enabled")).orElse(Optional.ofNullable(this.options.get("enabled")).orElse(true)));
@@ -82,7 +82,7 @@ public class Configuration
 
 			Map<String, Object> newOptions = Maps.newLinkedHashMap();
 			newOptions.put("version", 2);
-			newOptions.put("identify_mode", "uuid"); // tracking mode defaulted to uuid
+			newOptions.put("identify_mode", Optional.ofNullable(this.options.get("identify_mode")).orElse("uuid"));
 			newOptions.put("whitelist_enabled", Optional.ofNullable(this.options.get("whitelist_enabled")).orElse(true));
 			newOptions.put("whitelist_kick_message", Optional.ofNullable(this.options.get("whitelist_kick_message")).orElse("You are not in the whitelist!"));
 			newOptions.put("blacklist_enabled", Optional.ofNullable(this.options.get("blacklist_enabled")).orElse(true));
