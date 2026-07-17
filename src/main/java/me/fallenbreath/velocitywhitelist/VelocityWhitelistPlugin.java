@@ -7,6 +7,7 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
+import me.fallenbreath.velocitywhitelist.command.IpBanCommand;
 import me.fallenbreath.velocitywhitelist.command.PluginControlCommand;
 import me.fallenbreath.velocitywhitelist.command.WhitelistCommand;
 import me.fallenbreath.velocitywhitelist.config.Configuration;
@@ -22,7 +23,7 @@ import java.util.Objects;
 		id = PluginMeta.ID, name = PluginMeta.NAME, version = PluginMeta.VERSION,
 		url = PluginMeta.REPOSITORY_URL,
 		description = "A simple whitelist plugin for velocity",
-		authors = {"Fallen_Breath"}
+		authors = {"Fallen_Breath", "no7here"}
 )
 public class VelocityWhitelistPlugin
 {
@@ -58,6 +59,7 @@ public class VelocityWhitelistPlugin
 
 		this.server.getEventManager().register(this, LoginEvent.class, this.whitelistManager::onPlayerLogin);
 		new WhitelistCommand(this.whitelistManager).register(this.server.getCommandManager());
+		new IpBanCommand(this.whitelistManager).register(this.server.getCommandManager());
 		new PluginControlCommand(this.logger, this.config, this.whitelistManager).register(this.server.getCommandManager());
 	}
 
