@@ -46,19 +46,52 @@ public class Configuration
 	private void migrate()
 	{
 		boolean migrated = false;
-		if (this.options.get("_version") == null)
+		Object versionObj = this.options.get("_version");
+		if (versionObj == null)
 		{
-			// migrate v0.2 -> v0.3
-			this.logger.warn("Migrating config file from pre-v0.3");
+			versionObj = this.options.get("version");
+		}
+
+		if (versionObj == null)
+		{
+			// migrate pre-v0.3/v1 -> v2
+			this.logger.warn("Migrating config file from legacy version");
 			this.logger.warn("Please read the documentation for more information: {}", PluginMeta.REPOSITORY_URL);
 
 			Map<String, Object> newOptions = Maps.newLinkedHashMap();
-			newOptions.put("_version", 1);
-			newOptions.put("identify_mode", Optional.ofNullable(this.options.get("identify_mode")).orElse("name"));
-			newOptions.put("whitelist_enabled", Optional.ofNullable(this.options.get("enabled")).orElse(true));
-			newOptions.put("whitelist_kick_message", Optional.ofNullable(this.options.get("kick_message")).orElse("You are not in the whitelist!"));
-			newOptions.put("blacklist_enabled", Optional.ofNullable(this.options.get("enabled")).orElse(true));  // it's ok to enable an empty blacklist
-			newOptions.put("blacklist_kick_message", "You are banned from the server!");
+			newOptions.put("version", 2);
+			newOptions.put("identify_mode", "uuid"); // tracking mode defaulted to uuid
+			newOptions.put("whitelist_enabled", Optional.ofNullable(this.options.get("whitelist_enabled")).orElse(Optional.ofNullable(this.options.get("enabled")).orElse(true)));
+			newOptions.put("whitelist_kick_message", Optional.ofNullable(this.options.get("whitelist_kick_message")).orElse(Optional.ofNullable(this.options.get("kick_message")).orElse("You are not in the whitelist!")));
+			newOptions.put("blacklist_enabled", Optional.ofNullable(this.options.get("blacklist_enabled")).orElse(Optional.ofNullable(this.options.get("enabled")).orElse(true)));
+			newOptions.put("blacklist_kick_message", Optional.ofNullable(this.options.get("blacklist_kick_message")).orElse("You are banned from the server!"));
+			
+			// IP bans options
+			newOptions.put("ipban_enabled", true);
+			newOptions.put("ipban_kick_message", "Your IP address is banned from the server!");
+			newOptions.put("blacklist_on_ipban_join", true);
+
+			this.options.clear();
+			this.options.putAll(newOptions);
+			migrated = true;
+		}
+		else if (versionObj instanceof Number && ((Number)versionObj).intValue() == 1)
+		{
+			// migrate v1 -> v2
+			this.logger.warn("Migrating config file from v1 to v2");
+
+			Map<String, Object> newOptions = Maps.newLinkedHashMap();
+			newOptions.put("version", 2);
+			newOptions.put("identify_mode", "uuid"); // tracking mode defaulted to uuid
+			newOptions.put("whitelist_enabled", Optional.ofNullable(this.options.get("whitelist_enabled")).orElse(true));
+			newOptions.put("whitelist_kick_message", Optional.ofNullable(this.options.get("whitelist_kick_message")).orElse("You are not in the whitelist!"));
+			newOptions.put("blacklist_enabled", Optional.ofNullable(this.options.get("blacklist_enabled")).orElse(true));
+			newOptions.put("blacklist_kick_message", Optional.ofNullable(this.options.get("blacklist_kick_message")).orElse("You are banned from the server!"));
+			
+			// IP bans options
+			newOptions.put("ipban_enabled", true);
+			newOptions.put("ipban_kick_message", "Your IP address is banned from the server!");
+			newOptions.put("blacklist_on_ipban_join", true);
 
 			this.options.clear();
 			this.options.putAll(newOptions);
@@ -120,6 +153,26 @@ public class Configuration
 		return false;
 	}
 
+	public boolean isIpBanEnabled()
+	{
+		Object enabled = this.options.get("ipban_enabled");
+		if (enabled instanceof Boolean)
+		{
+			return (Boolean)enabled;
+		}
+		return false;
+	}
+
+	public boolean isBlacklistOnIpBanJoin()
+	{
+		Object opt = this.options.get("blacklist_on_ipban_join");
+		if (opt instanceof Boolean)
+		{
+			return (Boolean)opt;
+		}
+		return false;
+	}
+
 	public IdentifyMode getIdentifyMode()
 	{
 		return this.identifyMode;
@@ -143,5 +196,15 @@ public class Configuration
 			return (String)maxPlayer;
 		}
 		return "You are banned from the server!";
+	}
+
+	public String getIpBanKickMessage()
+	{
+		Object msg = this.options.get("ipban_kick_message");
+		if (msg instanceof String)
+		{
+			return (String)msg;
+		}
+		return "Your IP address is banned from the server!";
 	}
 }
