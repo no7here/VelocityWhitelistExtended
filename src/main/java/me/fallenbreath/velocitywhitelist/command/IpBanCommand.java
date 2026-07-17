@@ -9,7 +9,6 @@ import me.fallenbreath.velocitywhitelist.config.IpList;
 import net.kyori.adventure.text.Component;
 
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 
 import static com.mojang.brigadier.arguments.StringArgumentType.getString;
 import static com.mojang.brigadier.arguments.StringArgumentType.string;
@@ -80,18 +79,19 @@ public class IpBanCommand
 			return 0;
 		}
 
-		// Normalize & Validate IP address strictly
-		String targetIp;
-		try
-		{
-			InetAddress addr = InetAddress.getByName(ipStr.trim());
-			targetIp = addr.getHostAddress();
-		}
-		catch (UnknownHostException e)
+		// Strict Offline IP-literal validation using Guava's InetAddresses to prevent blocking DNS lookup races
+		String cleanIp = ipStr.trim();
+		int pct = cleanIp.indexOf('%');
+		String checkIp = pct != -1 ? cleanIp.substring(0, pct) : cleanIp;
+
+		if (!com.google.common.net.InetAddresses.isInetAddress(checkIp))
 		{
 			source.sendMessage(Component.text(String.format("Error: '%s' is not a valid IP address.", ipStr)));
 			return 0;
 		}
+
+		InetAddress addr = com.google.common.net.InetAddresses.forString(checkIp);
+		String targetIp = addr.getHostAddress();
 
 		if (list.addIp(targetIp))
 		{
@@ -124,18 +124,19 @@ public class IpBanCommand
 			return 0;
 		}
 
-		// Normalize & Validate IP address strictly
-		String targetIp;
-		try
-		{
-			InetAddress addr = InetAddress.getByName(ipStr.trim());
-			targetIp = addr.getHostAddress();
-		}
-		catch (UnknownHostException e)
+		// Strict Offline IP-literal validation using Guava's InetAddresses to prevent blocking DNS lookup races
+		String cleanIp = ipStr.trim();
+		int pct = cleanIp.indexOf('%');
+		String checkIp = pct != -1 ? cleanIp.substring(0, pct) : cleanIp;
+
+		if (!com.google.common.net.InetAddresses.isInetAddress(checkIp))
 		{
 			source.sendMessage(Component.text(String.format("Error: '%s' is not a valid IP address.", ipStr)));
 			return 0;
 		}
+
+		InetAddress addr = com.google.common.net.InetAddresses.forString(checkIp);
+		String targetIp = addr.getHostAddress();
 
 		if (list.removeIp(targetIp))
 		{
