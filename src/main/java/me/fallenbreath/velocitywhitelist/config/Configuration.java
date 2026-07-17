@@ -67,9 +67,9 @@ public class Configuration
 			newOptions.put("blacklist_kick_message", Optional.ofNullable(this.options.get("blacklist_kick_message")).orElse("You are banned from the server!"));
 			
 			// IP bans options
-			newOptions.put("ipban_enabled", true);
-			newOptions.put("ipban_kick_message", "Your IP address is banned from the server!");
-			newOptions.put("blacklist_on_ipban_join", true);
+			newOptions.put("ipban_enabled", Optional.ofNullable(this.options.get("ipban_enabled")).orElse(true));
+			newOptions.put("ipban_kick_message", Optional.ofNullable(this.options.get("ipban_kick_message")).orElse("Your IP address is banned from the server!"));
+			newOptions.put("blacklist_on_ipban_join", Optional.ofNullable(this.options.get("blacklist_on_ipban_join")).orElse(true));
 
 			this.options.clear();
 			this.options.putAll(newOptions);
@@ -89,9 +89,9 @@ public class Configuration
 			newOptions.put("blacklist_kick_message", Optional.ofNullable(this.options.get("blacklist_kick_message")).orElse("You are banned from the server!"));
 			
 			// IP bans options
-			newOptions.put("ipban_enabled", true);
-			newOptions.put("ipban_kick_message", "Your IP address is banned from the server!");
-			newOptions.put("blacklist_on_ipban_join", true);
+			newOptions.put("ipban_enabled", Optional.ofNullable(this.options.get("ipban_enabled")).orElse(true));
+			newOptions.put("ipban_kick_message", Optional.ofNullable(this.options.get("ipban_kick_message")).orElse("Your IP address is banned from the server!"));
+			newOptions.put("blacklist_on_ipban_join", Optional.ofNullable(this.options.get("blacklist_on_ipban_join")).orElse(true));
 
 			this.options.clear();
 			this.options.putAll(newOptions);
