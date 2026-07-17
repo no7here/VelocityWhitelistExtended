@@ -39,6 +39,12 @@ public class WhitelistManager
 	private final Object saveLock = new Object();
 	private final Object ipBanLock = new Object();
 
+	// Rate limiting auto-blacklist writes to prevent disk exhaustion or I/O flooding attacks
+	private long lastAutoBlacklistReset = 0;
+	private int autoBlacklistCount = 0;
+	private static final int MAX_AUTO_BLACKLISTS_PER_WINDOW = 5;
+	private static final long RATE_LIMIT_WINDOW_MS = 10000; // 10 seconds
+
 	public WhitelistManager(Logger logger, Configuration config, Path dataDirectory, ProxyServer server)
 	{
 		this.logger = logger;
@@ -224,17 +230,18 @@ public class WhitelistManager
 
 	public boolean addPlayer(CommandSource source, PlayerList list, String value)
 	{
-		synchronized (this.saveLock)
-		{
-			boolean isBlacklist = list == this.getBlacklist();
-			return this.operatePlayer(
-					source, value,
-					(uuid, playerName) -> {
-						if (isBlacklist)
-						{
-							this.server.getPlayer(playerName).ifPresent(this::handlePlayerAddedToBlacklist);
-						}
+		boolean isBlacklist = list == this.getBlacklist();
+		return this.operatePlayer(
+				source, value,
+				(uuid, playerName) -> {
+					if (isBlacklist)
+					{
+						this.server.getPlayer(playerName).ifPresent(this::handlePlayerAddedToBlacklist);
+					}
 
+					// Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
+					synchronized (this.saveLock)
+					{
 						if (list.addPlayerName(playerName))
 						{
 							if (this.saveList(list))
@@ -249,23 +256,27 @@ public class WhitelistManager
 								return false;
 							}
 						}
-						source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
-						return false;
-					},
-					(uuid, playerName, displayName) -> {
-						if (isBlacklist)
-						{
-							this.server.getPlayer(uuid).ifPresent(this::handlePlayerAddedToBlacklist);
-						}
+					}
+					source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
+					return false;
+				},
+				(uuid, playerName, displayName) -> {
+					if (isBlacklist)
+					{
+						this.server.getPlayer(uuid).ifPresent(this::handlePlayerAddedToBlacklist);
+					}
 
-						// Fetch prior state to be able to roll back on failure
-						class RefState {
-							boolean existed;
-							String oldName;
-							boolean nameChanged;
-						}
-						RefState ref = new RefState();
+					// Fetch prior state to be able to roll back on failure
+					class RefState {
+						boolean existed;
+						String oldName;
+						boolean nameChanged;
+					}
+					RefState ref = new RefState();
 
+					// Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
+					synchronized (this.saveLock)
+					{
 						boolean addedNew = list.computePlayerUUID(uuid, (exists, oldName) -> {
 							var result = new PlayerList.PlayerUUIDComputeResult<Boolean>();
 							ref.existed = exists;
@@ -331,8 +342,8 @@ public class WhitelistManager
 							return false;
 						}
 					}
-			);
-		}
+				}
+		);
 	}
 
 	private void handlePlayerAddedToBlacklist(Player player)
@@ -345,11 +356,12 @@ public class WhitelistManager
 
 	public boolean removePlayer(CommandSource source, PlayerList list, String value)
 	{
-		synchronized (this.saveLock)
-		{
-			return this.operatePlayer(
-					source, value,
-					(uuid, playerName) -> {
+		return this.operatePlayer(
+				source, value,
+				(uuid, playerName) -> {
+					// Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
+					synchronized (this.saveLock)
+					{
 						if (list.removePlayerName(playerName))
 						{
 							if (this.saveList(list))
@@ -364,10 +376,14 @@ public class WhitelistManager
 								return false;
 							}
 						}
-						source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
-						return false;
-					},
-					(uuid, playerName, displayName) -> {
+					}
+					source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
+					return false;
+				},
+				(uuid, playerName, displayName) -> {
+					// Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
+					synchronized (this.saveLock)
+					{
 						// Bare UUID entries map to null name, so determine existence using checkPlayerUUID first
 						boolean exists = list.checkPlayerUUID(uuid);
 						if (exists)
@@ -391,11 +407,11 @@ public class WhitelistManager
 								return false;
 							}
 						}
-						source.sendMessage(Component.text(String.format("Player %s is not in the %s", displayName, list.getName())));
-						return false;
 					}
-			);
-		}
+					source.sendMessage(Component.text(String.format("Player %s is not in the %s", displayName, list.getName())));
+					return false;
+				}
+		);
 	}
 
 	public void kickPlayersOnIp(String ipStr)
@@ -454,75 +470,99 @@ public class WhitelistManager
 				// Blacklist on join toggle
 				if (this.config.isBlacklistOnIpBanJoin() && this.blacklist.isLoadOk())
 				{
-					// Serialize mutation and persistence to prevent concurrent writes racing on the shared tmp path
+					// Rate limit auto-blacklisting to prevent disk-exhaustion or write-flooding attacks
+					long now = System.currentTimeMillis();
+					boolean allowed = false;
 					synchronized (this.saveLock)
 					{
-						// Add player to blacklist
-						if (this.config.getIdentifyMode() == IdentifyMode.NAME)
+						if (now - this.lastAutoBlacklistReset > RATE_LIMIT_WINDOW_MS)
 						{
-							if (this.blacklist.addPlayerName(profile.getName()))
+							this.lastAutoBlacklistReset = now;
+							this.autoBlacklistCount = 0;
+						}
+						if (this.autoBlacklistCount < MAX_AUTO_BLACKLISTS_PER_WINDOW)
+						{
+							this.autoBlacklistCount++;
+							allowed = true;
+						}
+					}
+
+					if (allowed)
+					{
+						// Serialize mutation and persistence to prevent concurrent writes racing on the shared tmp path
+						synchronized (this.saveLock)
+						{
+							// Add player to blacklist
+							if (this.config.getIdentifyMode() == IdentifyMode.NAME)
 							{
-								if (this.saveList(this.blacklist))
+								if (this.blacklist.addPlayerName(profile.getName()))
 								{
-									this.logger.info("Automatically added player name {} to the blacklist due to joining on banned IP", profile.getName());
+									if (this.saveList(this.blacklist))
+									{
+										this.logger.info("Automatically added player name {} to the blacklist due to joining on banned IP", profile.getName());
+									}
+									else
+									{
+										this.blacklist.removePlayerName(profile.getName()); // rollback on failed save
+									}
 								}
-								else
+							}
+							else
+							{
+								class RefState {
+									boolean existed;
+									String oldName;
+								}
+								RefState ref = new RefState();
+
+								boolean updated = this.blacklist.computePlayerUUID(profile.getId(), (exists, oldName) -> {
+									var res = new PlayerList.PlayerUUIDComputeResult<Boolean>();
+									ref.existed = exists;
+									ref.oldName = oldName;
+									if (!exists || profile.getName() != null && (oldName == null || !oldName.equals(profile.getName())))
+									{
+										res.addNewValue = true;
+										res.newValue = profile.getName();
+										res.ret = true;
+									}
+									else
+									{
+										res.ret = false;
+									}
+									return res;
+								});
+
+								if (updated)
 								{
-									this.blacklist.removePlayerName(profile.getName()); // rollback on failed save
+									if (this.saveList(this.blacklist))
+									{
+										this.logger.info("Automatically added player UUID {} ({}) to the blacklist due to joining on banned IP", profile.getId(), profile.getName());
+									}
+									else
+									{
+										// rollback on failed save
+										this.blacklist.computePlayerUUID(profile.getId(), (exists, o) -> {
+											var res = new PlayerList.PlayerUUIDComputeResult<Void>();
+											if (ref.existed)
+											{
+												res.addNewValue = true;
+												res.newValue = ref.oldName;
+											}
+											else
+											{
+												this.blacklist.removePlayerUUID(profile.getId());
+												res.addNewValue = false;
+											}
+											return res;
+										});
+									}
 								}
 							}
 						}
-						else
-						{
-							class RefState {
-								boolean existed;
-								String oldName;
-							}
-							RefState ref = new RefState();
-
-							boolean updated = this.blacklist.computePlayerUUID(profile.getId(), (exists, oldName) -> {
-								var res = new PlayerList.PlayerUUIDComputeResult<Boolean>();
-								ref.existed = exists;
-								ref.oldName = oldName;
-								if (!exists || profile.getName() != null && (oldName == null || !oldName.equals(profile.getName())))
-								{
-									res.addNewValue = true;
-									res.newValue = profile.getName();
-									res.ret = true;
-								}
-								else
-								{
-									res.ret = false;
-								}
-								return res;
-							});
-
-							if (updated)
-							{
-								if (this.saveList(this.blacklist))
-								{
-									this.logger.info("Automatically added player UUID {} ({}) to the blacklist due to joining on banned IP", profile.getId(), profile.getName());
-								}
-								else
-								{
-									// rollback on failed save
-									this.blacklist.computePlayerUUID(profile.getId(), (exists, o) -> {
-										var res = new PlayerList.PlayerUUIDComputeResult<Void>();
-										if (ref.existed)
-										{
-											res.addNewValue = true;
-											res.newValue = ref.oldName;
-										}
-										else
-										{
-											this.blacklist.removePlayerUUID(profile.getId());
-											res.addNewValue = false;
-										}
-										return res;
-									});
-								}
-							}
-						}
+					}
+					else
+					{
+						this.logger.warn("Skipping automatic blacklist addition for {} ({}) due to rate-limit protection (IP ban is still enforced)", profile.getName(), profile.getId());
 					}
 				}
 				return; // Exit early if IP banned
