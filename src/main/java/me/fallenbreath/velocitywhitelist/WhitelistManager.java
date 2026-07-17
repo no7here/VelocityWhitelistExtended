@@ -37,6 +37,7 @@ public class WhitelistManager
 	private final PlayerList blacklist;
 	private final IpList ipBanList;
 	private final Object saveLock = new Object();
+	private final Object ipBanLock = new Object();
 
 	public WhitelistManager(Logger logger, Configuration config, Path dataDirectory, ProxyServer server)
 	{
@@ -71,6 +72,11 @@ public class WhitelistManager
 	public IpList getIpBanList()
 	{
 		return this.ipBanList;
+	}
+
+	public Object getIpBanLock()
+	{
+		return this.ipBanLock;
 	}
 
 	public boolean loadLists()
@@ -362,9 +368,11 @@ public class WhitelistManager
 						return false;
 					},
 					(uuid, playerName, displayName) -> {
-						String oldName = list.removePlayerUUID(uuid);
-						if (oldName != null)
+						// Bare UUID entries map to null name, so determine existence using checkPlayerUUID first
+						boolean exists = list.checkPlayerUUID(uuid);
+						if (exists)
 						{
+							String oldName = list.removePlayerUUID(uuid);
 							if (this.saveList(list))
 							{
 								source.sendMessage(Component.text(String.format("Removed player %s from the %s", displayName, list.getName())));
@@ -373,7 +381,7 @@ public class WhitelistManager
 							else
 							{
 								// rollback
-								list.computePlayerUUID(uuid, (exists, o) -> {
+								list.computePlayerUUID(uuid, (exist, o) -> {
 									var res = new PlayerList.PlayerUUIDComputeResult<Void>();
 									res.addNewValue = true;
 									res.newValue = oldName;
@@ -454,20 +462,33 @@ public class WhitelistManager
 						{
 							if (this.blacklist.addPlayerName(profile.getName()))
 							{
-								this.logger.info("Automatically added player name {} to the blacklist due to joining on banned IP", profile.getName());
-								this.saveList(this.blacklist);
+								if (this.saveList(this.blacklist))
+								{
+									this.logger.info("Automatically added player name {} to the blacklist due to joining on banned IP", profile.getName());
+								}
+								else
+								{
+									this.blacklist.removePlayerName(profile.getName()); // rollback on failed save
+								}
 							}
 						}
 						else
 						{
+							class RefState {
+								boolean existed;
+								String oldName;
+							}
+							RefState ref = new RefState();
+
 							boolean updated = this.blacklist.computePlayerUUID(profile.getId(), (exists, oldName) -> {
 								var res = new PlayerList.PlayerUUIDComputeResult<Boolean>();
+								ref.existed = exists;
+								ref.oldName = oldName;
 								if (!exists || profile.getName() != null && (oldName == null || !oldName.equals(profile.getName())))
 								{
 									res.addNewValue = true;
 									res.newValue = profile.getName();
 									res.ret = true;
-									this.logger.info("Automatically added player UUID {} ({}) to the blacklist due to joining on banned IP", profile.getId(), profile.getName());
 								}
 								else
 								{
@@ -475,9 +496,31 @@ public class WhitelistManager
 								}
 								return res;
 							});
+
 							if (updated)
 							{
-								this.saveList(this.blacklist);
+								if (this.saveList(this.blacklist))
+								{
+									this.logger.info("Automatically added player UUID {} ({}) to the blacklist due to joining on banned IP", profile.getId(), profile.getName());
+								}
+								else
+								{
+									// rollback on failed save
+									this.blacklist.computePlayerUUID(profile.getId(), (exists, o) -> {
+										var res = new PlayerList.PlayerUUIDComputeResult<Void>();
+										if (ref.existed)
+										{
+											res.addNewValue = true;
+											res.newValue = ref.oldName;
+										}
+										else
+										{
+											this.blacklist.removePlayerUUID(profile.getId());
+											res.addNewValue = false;
+										}
+										return res;
+									});
+								}
 							}
 						}
 					}
