@@ -1,94 +1,95 @@
-# VelocityWhitelist
+### 📄 VelocityWhitelist
+A fork of TISUnion's [VelocityWhitelist](https://github.com/TISUnion/VelocityWhitelist), with IP ban support.</p>
 
-A simple whitelist / blacklist plugin for [velocity](https://github.com/PaperMC/Velocity)
+***
+#### 🪛 Changes
+A list of what's changed versus the original plugin.
+***
+- Updated logic so whitelist & blacklist can be enabled at the same time (with blacklist taking priority)
+- Implement IP bans (takes priority over blacklist) 
+- Updated configuration file to support IP bans
+- Small updates to modernise and clean up existing code
 
-Tested with velocity `3.3.0`, java 17
+***
+#### 📄 Files
+All the files generated and used by the plugin. 
+***
 
-## Files
-
-### Config
-
-File location: `plugins/velocitywhitelist/config.yml`
+#### ⚙️ Config
+`plugins/velocitywhitelist/config.yml`
 
 ```yaml
-# Config file version. Do not edit it
-_version: 1
+# Config file version. Do not edit it.
+version: 2
 
-# The way to identify a player
-# Options: name, uuid. Default: name
-# For online servers, it's suggested to use the uuid mode 
-# since it can keep tracking on the mojang account of the player
-identify_mode: name
+# Control how players are identified
+# Options: name, uuid. Default: uuid
+# For online servers, it's recommended to use UUID as it tracks the permanent ID of the player's Mojang account, rather than the changeable username
+identify_mode: uuid
 
-# If the whitelist functionality is enabled
+# Control if the whitelist is enabled
 whitelist_enabled: true
-# Message sent to those not whitelisted players
+# Message sent to players who aren't whitelisted
 whitelist_kick_message: You are not in the whitelist!
 
-# If the blacklist functionality is enabled
+# Control if the blacklist is enabled (takes priority over whitelist if both are enabled)
 blacklist_enabled: true
-# Message sent to those blacklisted players
+# Message sent to players who are blacklisted
 blacklist_kick_message: You are banned from the server!
+
+# Control if IP bans are enabled
+ipban_enabled: true
+# Message sent to players who join on a banned IP address
+ipban_kick_message: Your IP address is banned from the server!
+# Controls whether players should be automatically blacklisted when they try join on a banned IP
+blacklist_on_ipban_join: true
 ```
 
-### Whitelist / Blacklist
+#### 📁 Whitelist & Blacklist
+`plugins/velocitywhitelist/whitelist.yml` // `plugins/velocitywhitelist/blacklist.yml`
 
-File location: `plugins/velocitywhitelist/whitelist.yml`, `plugins/velocitywhitelist/blacklist.yml`
-
-```yaml
-# Listed player names. Used in "name" mode only
+```yml
 names:
-- Fallen_Breath
-- Steve
-
-# Listed player UUIDs. Used in "uuid" mode only
+  - Player1
+  - Player2
 uuids:
-- 85dbd009-69ed-3cc4-b6b6-ac1e6d07202e
-- 5c93374f-2d55-3003-a4b5-ca885736fb0f
+  - 12345678-1234-1234-1234-123456789abc
 ```
 
-Additionally, items of the `uuids` list can be a map containing exactly 1 entry, indicating uuid to the player name.
-This is designed for easier identifying what the UUID belongs to
-
-```yaml
-uuids:
-- 85dbd009-69ed-3cc4-b6b6-ac1e6d07202e: Fallen_Breath
-- 5c93374f-2d55-3003-a4b5-ca885736fb0f: Steve
+#### 🌐 IP Bans
+`plugins/velocitywhitelist/ipbans.yml`
+```yml
+ips:
+  - 192.168.1.1
+  - 10.0.0.5
 ```
 
-## Command
+***
+#### 🔨 Commands
+Requires the permission `velocitywhitelist.command`.
+***
 
-Require permission `velocitywhitelist.command`
+> [!NOTE]
+> Only `name` can be used in name mode. Either can be used in UUID mode. 
 
-### Whitelist / Blacklist Control
+**Aliases:** 
+- `/vwhitelist`
+- `/vblacklist`
+- `/vipban`
 
-- `/whitelist` and `/vwhitelist` (alias) commands are for whitelist control
-- `/blacklist` and `/vblacklist` (alias) commands are for whitelist control
+**Whitelist & Blacklist (Substitute `/whitelist` with `/blacklist`):**
+- `/whitelist` - Show plugin status.
+- `/whitelist <add / remove> <name / uuid>` - Add or remove a player to the whitelist.
+- `/whitelist list` - List all players on whitelist.
+- `/whitelist reload` - Reload whitelist file from disk. Doesn't reload config.
 
-Let's use `/whitelist` as demonstration
+**IP Bans:**
+- `/ipban` - Show plugin status.
+- `/ipban <add / remove> <ip>` - Ban or unban an IP address.
+- `/ipban list` - List all IPs on the blacklist.
+- `/ipban reload` - Reload IP ban file from disk. Doesn't reload config.
 
-- `/whitelist`: Show plugin status
-- `/whitelist add <value>`: Add a player to the whitelist
-- `/whitelist remove <value>`: Remove a player from the whitelist
-- `/whitelist list`: List all whitelist players
-- `/whitelist reload`: Reload whitelist from whitelist file from the disk. Notes that config will not be reloaded
+**Plugin Control:** 
+- `/velocitywhitelist` - Show plugin information.
+- `/velocitywhitelist reload` - Reload config, whitelist, blacklist & IP ban files.
 
-For player operation commands, `<value>` has different meaning depends on the identity mode:
-
-- `name` mode: `<value>` should be the name of the player
-- `uuid` mode: `<value>` should be the UUID of the player, or the name of the player. 
-  If it's a player name, and the player is connected to the proxy, the player's UUID will be used, 
-  otherwise it will try to fetch and use the player's online UUID from mojang API
-  - The url base of the mojang API can be alternated with system property `velocitywhitelist.mojang.accountserver` 
-    (default value: `https://api.mojang.com/users/profiles/minecraft/`).
-    The final url string is concatenated from the property value and the player name ([example for steve](https://api.mojang.com/users/profiles/minecraft/Steve))
-
-### Plugin Control
-
-- `/velocitywhitelist`: Show plugin information
-- `/velocitywhitelist reload`: Reload config, whitelist and blacklist
-
-## TODO
-
-- [x] UUID support
-- [ ] IP ban for blacklist
