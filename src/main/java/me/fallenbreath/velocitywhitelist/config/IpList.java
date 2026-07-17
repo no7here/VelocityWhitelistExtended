@@ -92,6 +92,11 @@ public class IpList
 		synchronized (this.lock)
 		{
 			String cleanIp = stripScopeId(ipStr.trim());
+			if (com.google.common.net.InetAddresses.isInetAddress(cleanIp))
+			{
+				InetAddress target = com.google.common.net.InetAddresses.forString(cleanIp);
+				return this.ips.contains(target.getHostAddress());
+			}
 			try
 			{
 				InetAddress target = InetAddress.getByName(cleanIp);
@@ -110,6 +115,11 @@ public class IpList
 		synchronized (this.lock)
 		{
 			String trimmed = stripScopeId(ipStr.trim());
+			if (com.google.common.net.InetAddresses.isInetAddress(trimmed))
+			{
+				InetAddress addr = com.google.common.net.InetAddresses.forString(trimmed);
+				return this.ips.add(addr.getHostAddress());
+			}
 			try
 			{
 				InetAddress addr = InetAddress.getByName(trimmed);
@@ -128,6 +138,11 @@ public class IpList
 		synchronized (this.lock)
 		{
 			String trimmed = stripScopeId(ipStr.trim());
+			if (com.google.common.net.InetAddresses.isInetAddress(trimmed))
+			{
+				InetAddress target = com.google.common.net.InetAddresses.forString(trimmed);
+				return this.ips.remove(target.getHostAddress());
+			}
 			try
 			{
 				InetAddress target = InetAddress.getByName(trimmed);
