@@ -187,7 +187,7 @@ public class WhitelistManager
 		}
 
 		// uuid: get from value directly, or mojang api (looked up by input value)
-		// profile: get from server online player, lookuped by input value (name / uuid)
+		// profile: get from server online player, looked up by input value (name / uuid)
 
 		return switch (this.config.getIdentifyMode())
 		{
@@ -227,8 +227,17 @@ public class WhitelistManager
 
 					if (list.addPlayerName(playerName))
 					{
-						source.sendMessage(Component.text(String.format("Added player %s to the %s", playerName, list.getName())));
-						return true;
+						if (this.saveList(list))
+						{
+							source.sendMessage(Component.text(String.format("Added player %s to the %s", playerName, list.getName())));
+							return true;
+						}
+						else
+						{
+							list.removePlayerName(playerName); // rollback
+							source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+							return false;
+						}
 					}
 					source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
 					return false;
@@ -249,10 +258,18 @@ public class WhitelistManager
 								// set player name as a comment
 								result.addNewValue = true;
 								result.newValue = playerName;
-								source.sendMessage(Component.text(String.format(
-										"Player %s is already in the %s, updated player name for this uuid from %s to %s",
-										displayName, list.getName(), oldName, playerName
-								)));
+								if (this.saveList(list))
+								{
+									source.sendMessage(Component.text(String.format(
+											"Player %s is already in the %s, updated player name for this uuid from %s to %s",
+											displayName, list.getName(), oldName, playerName
+									)));
+								}
+								else
+								{
+									result.addNewValue = false; // rollback in memory
+									source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+								}
 							}
 							else
 							{
@@ -266,7 +283,16 @@ public class WhitelistManager
 							result.addNewValue = true;
 							result.newValue = playerName;
 							result.ret = true;
-							source.sendMessage(Component.text(String.format("Added player %s to the %s", displayName, list.getName())));
+							if (this.saveList(list))
+							{
+								source.sendMessage(Component.text(String.format("Added player %s to the %s", displayName, list.getName())));
+							}
+							else
+							{
+								result.addNewValue = false; // rollback
+								result.ret = false;
+								source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+							}
 						}
 						return result;
 					});
@@ -289,23 +315,47 @@ public class WhitelistManager
 				(uuid, playerName) -> {
 					if (list.removePlayerName(playerName))
 					{
-						source.sendMessage(Component.text(String.format("Removed player %s from the %s", playerName, list.getName())));
-						return true;
+						if (this.saveList(list))
+						{
+							source.sendMessage(Component.text(String.format("Removed player %s from the %s", playerName, list.getName())));
+							return true;
+						}
+						else
+						{
+							list.addPlayerName(playerName); // rollback
+							source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+							return false;
+						}
 					}
 					source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
 					return false;
 				},
 				(uuid, playerName, displayName) -> {
-					if (list.removePlayerUUID(uuid) != null)
+					String oldName = list.removePlayerUUID(uuid);
+					if (oldName != null)
 					{
-						source.sendMessage(Component.text(String.format("Removed player %s from the %s", displayName, list.getName())));
-						return true;
+						if (this.saveList(list))
+						{
+							source.sendMessage(Component.text(String.format("Removed player %s from the %s", displayName, list.getName())));
+							return true;
+						}
+						else
+						{
+							// rollback
+							list.computePlayerUUID(uuid, (exists, o) -> {
+								var res = new PlayerList.PlayerUUIDComputeResult<Void>();
+								res.addNewValue = true;
+								res.newValue = oldName;
+								return res;
+							});
+							source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+							return false;
+						}
 					}
 					source.sendMessage(Component.text(String.format("Player %s is not in the %s", displayName, list.getName())));
 					return false;
 				}
 		);
-
 	}
 
 	public void kickPlayersOnIp(String ipStr)
@@ -362,7 +412,7 @@ public class WhitelistManager
 				this.logger.info("Kicking player {} ({}) since their IP ({}) is banned", profile.getName(), profile.getId(), ipString);
 
 				// Blacklist on join toggle
-				if (this.config.isBlacklistOnIpBanJoin())
+				if (this.config.isBlacklistOnIpBanJoin() && this.blacklist.isLoadOk())
 				{
 					// Add player to blacklist
 					if (this.config.getIdentifyMode() == IdentifyMode.NAME)
@@ -375,17 +425,25 @@ public class WhitelistManager
 					}
 					else
 					{
-						this.blacklist.computePlayerUUID(profile.getId(), (exists, oldName) -> {
-							var res = new PlayerList.PlayerUUIDComputeResult<Void>();
+						boolean updated = this.blacklist.computePlayerUUID(profile.getId(), (exists, oldName) -> {
+							var res = new PlayerList.PlayerUUIDComputeResult<Boolean>();
 							if (!exists || profile.getName() != null && (oldName == null || !oldName.equals(profile.getName())))
 							{
 								res.addNewValue = true;
 								res.newValue = profile.getName();
+								res.ret = true;
 								this.logger.info("Automatically added player UUID {} ({}) to the blacklist due to joining on banned IP", profile.getId(), profile.getName());
+							}
+							else
+							{
+								res.ret = false;
 							}
 							return res;
 						});
-						this.saveList(this.blacklist);
+						if (updated)
+						{
+							this.saveList(this.blacklist);
+						}
 					}
 				}
 				return; // Exit early if IP banned
@@ -458,29 +516,33 @@ public class WhitelistManager
 		}
 	}
 
-	public void saveList(PlayerList list)
+	public boolean saveList(PlayerList list)
 	{
 		try
 		{
 			list.save();
+			return true;
 		}
 		catch (IOException e)
 		{
 			String msg = String.format("Failed to save the %s", list.getName());
 			this.logger.error(msg, e);
+			return false;
 		}
 	}
 
-	public void saveIpList(IpList list)
+	public boolean saveIpList(IpList list)
 	{
 		try
 		{
 			list.save();
+			return true;
 		}
 		catch (IOException e)
 		{
 			String msg = String.format("Failed to save the %s", list.getName());
 			this.logger.error(msg, e);
+			return false;
 		}
 	}
 }
