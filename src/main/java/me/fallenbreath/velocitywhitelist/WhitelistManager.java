@@ -293,26 +293,26 @@ public class WhitelistManager
 
 	public void onPlayerLogin(LoginEvent event)
 	{
-	    GameProfile profile = event.getPlayer().getGameProfile();
-	
-	    // Evaluate Blacklist FIRST
-	    if (this.blacklist.isActivated() && this.isPlayerInBlacklist(profile))
-	    {
-	        Component message = MiniMessage.miniMessage().deserialize(this.config.getBlacklistKickMessage());
-	        event.setResult(ResultedEvent.ComponentResult.denied(message));
-	
-	        this.logger.info("Kicking player {} ({}) since it's in the blacklist", profile.getName(), profile.getId());
-	        return; // Exit early if blacklisted
-	    }
-	
-	    // Evaluate Whitelist after
-	    if (this.whitelist.isActivated() && !this.isPlayerInWhitelist(profile))
-	    {
-	        Component message = MiniMessage.miniMessage().deserialize(this.config.getWhitelistKickMessage());
-	        event.setResult(ResultedEvent.ComponentResult.denied(message));
-	
-	        this.logger.info("Kicking player {} ({}) since it's not in the whitelist", profile.getName(), profile.getId());
-	    }
+		GameProfile profile = event.getPlayer().getGameProfile();
+
+		// Evaluate Blacklist FIRST
+		if (this.blacklist.isActivated() && this.isPlayerInBlacklist(profile))
+		{
+			Component message = MiniMessage.miniMessage().deserialize(this.config.getBlacklistKickMessage());
+			event.setResult(ResultedEvent.ComponentResult.denied(message));
+
+			this.logger.info("Kicking player {} ({}) since it's in the blacklist", profile.getName(), profile.getId());
+			return; // Exit early if blacklisted
+		}
+
+		// Evaluate Whitelist after
+		if (this.whitelist.isActivated() && !this.isPlayerInWhitelist(profile))
+		{
+			Component message = MiniMessage.miniMessage().deserialize(this.config.getWhitelistKickMessage());
+			event.setResult(ResultedEvent.ComponentResult.denied(message));
+
+			this.logger.info("Kicking player {} ({}) since it's not in the whitelist", profile.getName(), profile.getId());
+		}
 	}
 
 	public boolean loadOneList(PlayerList destList)
