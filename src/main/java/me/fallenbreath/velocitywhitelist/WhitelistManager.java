@@ -295,25 +295,23 @@ public class WhitelistManager
 	{
 		GameProfile profile = event.getPlayer().getGameProfile();
 
-		if (this.whitelist.isActivated())
+		// Evaluate Blacklist FIRST
+		if (this.blacklist.isActivated() && this.isPlayerInBlacklist(profile))
 		{
-			if (!this.isPlayerInWhitelist(profile))
-			{
-				Component message = MiniMessage.miniMessage().deserialize(this.config.getWhitelistKickMessage());
-				event.setResult(ResultedEvent.ComponentResult.denied(message));
+			Component message = MiniMessage.miniMessage().deserialize(this.config.getBlacklistKickMessage());
+			event.setResult(ResultedEvent.ComponentResult.denied(message));
 
-				this.logger.info("Kicking player {} ({}) since it's not in the whitelist", profile.getName(), profile.getId());
-			}
+			this.logger.info("Kicking player {} ({}) since it's in the blacklist", profile.getName(), profile.getId());
+			return; // Exit early if blacklisted
 		}
-		else if (this.blacklist.isActivated())
-		{
-			if (this.isPlayerInBlacklist(profile))
-			{
-				Component message = MiniMessage.miniMessage().deserialize(this.config.getBlacklistKickMessage());
-				event.setResult(ResultedEvent.ComponentResult.denied(message));
 
-				this.logger.info("Kicking player {} ({}) since it's in the blacklist", profile.getName(), profile.getId());
-			}
+		// Evaluate Whitelist after
+		if (this.whitelist.isActivated() && !this.isPlayerInWhitelist(profile))
+		{
+			Component message = MiniMessage.miniMessage().deserialize(this.config.getWhitelistKickMessage());
+			event.setResult(ResultedEvent.ComponentResult.denied(message));
+
+			this.logger.info("Kicking player {} ({}) since it's not in the whitelist", profile.getName(), profile.getId());
 		}
 	}
 
