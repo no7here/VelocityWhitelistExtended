@@ -44,7 +44,9 @@ public class PluginControlCommand
 		try
 		{
 			this.config.reload();
-			if (this.manager.loadLists())
+boolean loaded = this.manager.loadLists();
+			this.manager.kickIpBannedPlayers();
+			if (loaded)
 			{
 				source.sendMessage(Component.text("Reloaded config, whitelist, blacklist and IP ban list"));
 				return 1;
