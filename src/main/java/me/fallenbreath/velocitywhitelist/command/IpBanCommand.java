@@ -80,7 +80,7 @@ public class IpBanCommand
 			return 0;
 		}
 
-		// Normalize IP address
+		// Normalize & Validate IP address strictly
 		String targetIp;
 		try
 		{
@@ -89,18 +89,26 @@ public class IpBanCommand
 		}
 		catch (UnknownHostException e)
 		{
-			source.sendMessage(Component.text(String.format("Warning: '%s' is not a valid IP address. Adding literally", ipStr)));
-			targetIp = ipStr.trim();
+			source.sendMessage(Component.text(String.format("Error: '%s' is not a valid IP address.", ipStr)));
+			return 0;
 		}
 
 		if (list.addIp(targetIp))
 		{
-			this.manager.saveIpList(list);
-			source.sendMessage(Component.text(String.format("Added IP %s to the IP ban list", targetIp)));
+			if (this.manager.saveIpList(list))
+			{
+				source.sendMessage(Component.text(String.format("Added IP %s to the IP ban list", targetIp)));
 
-			// Automatically disconnect anyone connected on that IP
-			this.manager.kickPlayersOnIp(targetIp);
-			return 1;
+				// Automatically disconnect anyone connected on that IP
+				this.manager.kickPlayersOnIp(targetIp);
+				return 1;
+			}
+			else
+			{
+				list.removeIp(targetIp); // rollback
+				source.sendMessage(Component.text("Error: Failed to save the IP ban list to disk. Action was not applied."));
+				return 0;
+			}
 		}
 
 		source.sendMessage(Component.text(String.format("IP %s is already in the IP ban list", targetIp)));
@@ -116,14 +124,35 @@ public class IpBanCommand
 			return 0;
 		}
 
-		if (list.removeIp(ipStr))
+		// Normalize & Validate IP address strictly
+		String targetIp;
+		try
 		{
-			this.manager.saveIpList(list);
-			source.sendMessage(Component.text(String.format("Removed IP %s from the IP ban list", ipStr)));
-			return 1;
+			InetAddress addr = InetAddress.getByName(ipStr.trim());
+			targetIp = addr.getHostAddress();
+		}
+		catch (UnknownHostException e)
+		{
+			source.sendMessage(Component.text(String.format("Error: '%s' is not a valid IP address.", ipStr)));
+			return 0;
 		}
 
-		source.sendMessage(Component.text(String.format("IP %s is not in the IP ban list", ipStr)));
+		if (list.removeIp(targetIp))
+		{
+			if (this.manager.saveIpList(list))
+			{
+				source.sendMessage(Component.text(String.format("Removed IP %s from the IP ban list", targetIp)));
+				return 1;
+			}
+			else
+			{
+				list.addIp(targetIp); // rollback
+				source.sendMessage(Component.text("Error: Failed to save the IP ban list to disk. Action was not applied."));
+				return 0;
+			}
+		}
+
+		source.sendMessage(Component.text(String.format("IP %s is not in the IP ban list", targetIp)));
 		return 0;
 	}
 
