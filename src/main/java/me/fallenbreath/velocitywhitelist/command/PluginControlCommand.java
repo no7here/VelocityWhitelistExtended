@@ -44,9 +44,16 @@ public class PluginControlCommand
 		try
 		{
 			this.config.reload();
-			this.manager.loadLists();
-			source.sendMessage(Component.text("Reloaded config, whitelist, blacklist and IP ban list"));
-			return 1;
+			if (this.manager.loadLists())
+			{
+				source.sendMessage(Component.text("Reloaded config, whitelist, blacklist and IP ban list"));
+				return 1;
+			}
+			else
+			{
+				source.sendMessage(Component.text("Failed to reload some or all files, see console for details"));
+				return 0;
+			}
 		}
 		catch (Exception e)
 		{
