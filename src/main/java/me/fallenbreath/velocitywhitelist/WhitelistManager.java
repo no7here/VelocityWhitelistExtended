@@ -551,47 +551,55 @@ public class WhitelistManager
 
 	public boolean loadOneList(PlayerList destList)
 	{
-		PlayerList newList = destList.createNewEmptyList();
-		try
+		// Acquire transaction lock during reload to prevent concurrent modification or overwrite conflicts
+		synchronized (this.saveLock)
 		{
-			if (!newList.getFilePath().toFile().isFile())
+			PlayerList newList = destList.createNewEmptyList();
+			try
 			{
-				this.logger.info("Creating default empty {} file", newList.getName());
-				newList.save();
-			}
-			newList.load(this.logger);
+				if (!newList.getFilePath().toFile().isFile())
+				{
+					this.logger.info("Creating default empty {} file", newList.getName());
+					newList.save();
+				}
+				newList.load(this.logger);
 
-			destList.resetTo(newList);
-			return true;
-		}
-		catch (IOException e)
-		{
-			String msg = String.format("Failed to load the %s, the plugin might not work correctly!", newList.getName());
-			this.logger.error(msg, e);
-			return false;
+				destList.resetTo(newList);
+				return true;
+			}
+			catch (Exception e) // Catch generic Exception to handle SnakeYAML runtime YAMLException and parsing failures
+			{
+				String msg = String.format("Failed to load the %s, the plugin might not work correctly!", newList.getName());
+				this.logger.error(msg, e);
+				return false;
+			}
 		}
 	}
 
 	public boolean loadIpList(IpList destList)
 	{
-		IpList newList = destList.createNewEmptyList();
-		try
+		// Acquire transaction lock during reload to prevent concurrent modification or overwrite conflicts
+		synchronized (this.ipBanLock)
 		{
-			if (!newList.getFilePath().toFile().isFile())
+			IpList newList = destList.createNewEmptyList();
+			try
 			{
-				this.logger.info("Creating default empty {} file", newList.getName());
-				newList.save();
-			}
-			newList.load(this.logger);
+				if (!newList.getFilePath().toFile().isFile())
+				{
+					this.logger.info("Creating default empty {} file", newList.getName());
+					newList.save();
+				}
+				newList.load(this.logger);
 
-			destList.resetTo(newList);
-			return true;
-		}
-		catch (IOException e)
-		{
-			String msg = String.format("Failed to load the %s, the plugin might not work correctly!", newList.getName());
-			this.logger.error(msg, e);
-			return false;
+				destList.resetTo(newList);
+				return true;
+			}
+			catch (Exception e) // Catch generic Exception to handle SnakeYAML runtime YAMLException and parsing failures
+			{
+				String msg = String.format("Failed to load the %s, the plugin might not work correctly!", newList.getName());
+				this.logger.error(msg, e);
+				return false;
+			}
 		}
 	}
 
