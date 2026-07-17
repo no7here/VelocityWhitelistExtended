@@ -89,9 +89,8 @@ public class WhitelistCommand
 			return 0;
 		}
 
-		if (this.manager.addPlayer(source, list,playerName))
+		if (this.manager.addPlayer(source, list, playerName))
 		{
-			this.manager.saveList(list);
 			return 1;
 		}
 		return 0;
@@ -107,7 +106,6 @@ public class WhitelistCommand
 
 		if (this.manager.removePlayer(source, list, playerName))
 		{
-			this.manager.saveList(list);
 			return 1;
 		}
 		return 0;
