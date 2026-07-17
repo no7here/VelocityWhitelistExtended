@@ -83,23 +83,23 @@ public class WhitelistManager
 
 	public List<String> getValuesForRemovalSuggestion(PlayerList list)
 	{
-	    return switch (this.config.getIdentifyMode())
-	    {
-	        case NAME -> list.getPlayerNames();
-	        case UUID -> {
-	            List<String> values = Lists.newArrayList();
-	            var entries = list.getPlayerUuidMappingEntries();
-	            entries.forEach(e -> values.add(e.getKey().toString()));
-	            entries.forEach(e -> {
-	                var name = e.getValue();
-	                if (name != null)
-	                {
-	                    values.add(name);
-	                }
-	            });
-	            yield values;
-	        }
-	    };
+		return switch (this.config.getIdentifyMode())
+		{
+			case NAME -> list.getPlayerNames();
+			case UUID -> {
+				List<String> values = Lists.newArrayList();
+				var entries = list.getPlayerUuidMappingEntries();
+				entries.forEach(e -> values.add(e.getKey().toString()));
+				entries.forEach(e -> {
+					var name = e.getValue();
+					if (name != null)
+					{
+						values.add(name);
+					}
+				});
+				yield values;
+			}
+		};
 	}
 
 	public List<String> getValuesForListing(PlayerList list)
