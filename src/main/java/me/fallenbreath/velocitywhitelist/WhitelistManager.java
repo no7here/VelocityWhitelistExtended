@@ -36,6 +36,7 @@ public class WhitelistManager
 	private final PlayerList whitelist;
 	private final PlayerList blacklist;
 	private final IpList ipBanList;
+	private final Object saveLock = new Object();
 
 	public WhitelistManager(Logger logger, Configuration config, Path dataDirectory, ProxyServer server)
 	{
@@ -72,11 +73,12 @@ public class WhitelistManager
 		return this.ipBanList;
 	}
 
-	public void loadLists()
+	public boolean loadLists()
 	{
-		this.loadOneList(this.whitelist);
-		this.loadOneList(this.blacklist);
-		this.loadIpList(this.ipBanList);
+		boolean ok1 = this.loadOneList(this.whitelist);
+		boolean ok2 = this.loadOneList(this.blacklist);
+		boolean ok3 = this.loadIpList(this.ipBanList);
+		return ok1 && ok2 && ok3;
 	}
 
 	private boolean isPlayerInList(GameProfile profile, PlayerList list)
@@ -216,88 +218,115 @@ public class WhitelistManager
 
 	public boolean addPlayer(CommandSource source, PlayerList list, String value)
 	{
-		boolean isBlacklist = list == this.getBlacklist();
-		return this.operatePlayer(
-				source, value,
-				(uuid, playerName) -> {
-					if (isBlacklist)
-					{
-						this.server.getPlayer(playerName).ifPresent(this::handlePlayerAddedToBlacklist);
-					}
-
-					if (list.addPlayerName(playerName))
-					{
-						if (this.saveList(list))
+		synchronized (this.saveLock)
+		{
+			boolean isBlacklist = list == this.getBlacklist();
+			return this.operatePlayer(
+					source, value,
+					(uuid, playerName) -> {
+						if (isBlacklist)
 						{
-							source.sendMessage(Component.text(String.format("Added player %s to the %s", playerName, list.getName())));
-							return true;
+							this.server.getPlayer(playerName).ifPresent(this::handlePlayerAddedToBlacklist);
 						}
-						else
-						{
-							list.removePlayerName(playerName); // rollback
-							source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
-							return false;
-						}
-					}
-					source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
-					return false;
-				},
-				(uuid, playerName, displayName) -> {
-					if (isBlacklist)
-					{
-						this.server.getPlayer(uuid).ifPresent(this::handlePlayerAddedToBlacklist);
-					}
 
-					return list.computePlayerUUID(uuid, (exists, oldName) -> {
-						var result = new PlayerList.PlayerUUIDComputeResult<Boolean>();
-						if (exists)
+						if (list.addPlayerName(playerName))
 						{
-							result.ret = false;
-							if (playerName != null && (oldName == null || !oldName.equals(playerName)))
+							if (this.saveList(list))
 							{
-								// set player name as a comment
-								result.addNewValue = true;
-								result.newValue = playerName;
-								if (this.saveList(list))
+								source.sendMessage(Component.text(String.format("Added player %s to the %s", playerName, list.getName())));
+								return true;
+							}
+							else
+							{
+								list.removePlayerName(playerName); // rollback
+								source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+								return false;
+							}
+						}
+						source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
+						return false;
+					},
+					(uuid, playerName, displayName) -> {
+						if (isBlacklist)
+						{
+							this.server.getPlayer(uuid).ifPresent(this::handlePlayerAddedToBlacklist);
+						}
+
+						// Fetch prior state to be able to roll back on failure
+						class RefState {
+							boolean existed;
+							String oldName;
+							boolean nameChanged;
+						}
+						RefState ref = new RefState();
+
+						boolean addedNew = list.computePlayerUUID(uuid, (exists, oldName) -> {
+							var result = new PlayerList.PlayerUUIDComputeResult<Boolean>();
+							ref.existed = exists;
+							ref.oldName = oldName;
+							if (exists)
+							{
+								result.ret = false;
+								if (playerName != null && (oldName == null || !oldName.equals(playerName)))
 								{
-									source.sendMessage(Component.text(String.format(
-											"Player %s is already in the %s, updated player name for this uuid from %s to %s",
-											displayName, list.getName(), oldName, playerName
-									)));
-								}
-								else
-								{
-									result.addNewValue = false; // rollback in memory
-									source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+									result.addNewValue = true;
+									result.newValue = playerName;
+									ref.nameChanged = true;
 								}
 							}
 							else
 							{
-								// don't modify
-								result.addNewValue = false;
-								source.sendMessage(Component.text(String.format("Player %s is already in the %s", displayName, list.getName())));
+								result.addNewValue = true;
+								result.newValue = playerName;
+								result.ret = true;
 							}
-						}
-						else  // not exists
+							return result;
+						});
+
+						if (!addedNew && !ref.nameChanged)
 						{
-							result.addNewValue = true;
-							result.newValue = playerName;
-							result.ret = true;
-							if (this.saveList(list))
+							source.sendMessage(Component.text(String.format("Player %s is already in the %s", displayName, list.getName())));
+							return false;
+						}
+
+						if (this.saveList(list))
+						{
+							if (addedNew)
 							{
 								source.sendMessage(Component.text(String.format("Added player %s to the %s", displayName, list.getName())));
 							}
 							else
 							{
-								result.addNewValue = false; // rollback
-								result.ret = false;
-								source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+								source.sendMessage(Component.text(String.format(
+										"Player %s is already in the %s, updated player name for this uuid from %s to %s",
+										displayName, list.getName(), ref.oldName, playerName
+								)));
 							}
+							return true;
 						}
-						return result;
-					});
-				}
-		);
+						else
+						{
+							// rollback
+							list.computePlayerUUID(uuid, (exists, o) -> {
+								var res = new PlayerList.PlayerUUIDComputeResult<Void>();
+								if (ref.existed)
+								{
+									res.addNewValue = true;
+									res.newValue = ref.oldName;
+								}
+								else
+								{
+									list.removePlayerUUID(uuid);
+									res.addNewValue = false;
+								}
+								return res;
+							});
+							source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+							return false;
+						}
+					}
+			);
+		}
 	}
 
 	private void handlePlayerAddedToBlacklist(Player player)
@@ -310,52 +339,55 @@ public class WhitelistManager
 
 	public boolean removePlayer(CommandSource source, PlayerList list, String value)
 	{
-		return this.operatePlayer(
-				source, value,
-				(uuid, playerName) -> {
-					if (list.removePlayerName(playerName))
-					{
-						if (this.saveList(list))
+		synchronized (this.saveLock)
+		{
+			return this.operatePlayer(
+					source, value,
+					(uuid, playerName) -> {
+						if (list.removePlayerName(playerName))
 						{
-							source.sendMessage(Component.text(String.format("Removed player %s from the %s", playerName, list.getName())));
-							return true;
+							if (this.saveList(list))
+							{
+								source.sendMessage(Component.text(String.format("Removed player %s from the %s", playerName, list.getName())));
+								return true;
+							}
+							else
+							{
+								list.addPlayerName(playerName); // rollback
+								source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+								return false;
+							}
 						}
-						else
+						source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
+						return false;
+					},
+					(uuid, playerName, displayName) -> {
+						String oldName = list.removePlayerUUID(uuid);
+						if (oldName != null)
 						{
-							list.addPlayerName(playerName); // rollback
-							source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
-							return false;
+							if (this.saveList(list))
+							{
+								source.sendMessage(Component.text(String.format("Removed player %s from the %s", displayName, list.getName())));
+								return true;
+							}
+							else
+							{
+								// rollback
+								list.computePlayerUUID(uuid, (exists, o) -> {
+									var res = new PlayerList.PlayerUUIDComputeResult<Void>();
+									res.addNewValue = true;
+									res.newValue = oldName;
+									return res;
+								});
+								source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+								return false;
+							}
 						}
+						source.sendMessage(Component.text(String.format("Player %s is not in the %s", displayName, list.getName())));
+						return false;
 					}
-					source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
-					return false;
-				},
-				(uuid, playerName, displayName) -> {
-					String oldName = list.removePlayerUUID(uuid);
-					if (oldName != null)
-					{
-						if (this.saveList(list))
-						{
-							source.sendMessage(Component.text(String.format("Removed player %s from the %s", displayName, list.getName())));
-							return true;
-						}
-						else
-						{
-							// rollback
-							list.computePlayerUUID(uuid, (exists, o) -> {
-								var res = new PlayerList.PlayerUUIDComputeResult<Void>();
-								res.addNewValue = true;
-								res.newValue = oldName;
-								return res;
-							});
-							source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
-							return false;
-						}
-					}
-					source.sendMessage(Component.text(String.format("Player %s is not in the %s", displayName, list.getName())));
-					return false;
-				}
-		);
+			);
+		}
 	}
 
 	public void kickPlayersOnIp(String ipStr)
@@ -414,35 +446,39 @@ public class WhitelistManager
 				// Blacklist on join toggle
 				if (this.config.isBlacklistOnIpBanJoin() && this.blacklist.isLoadOk())
 				{
-					// Add player to blacklist
-					if (this.config.getIdentifyMode() == IdentifyMode.NAME)
+					// Serialize mutation and persistence to prevent concurrent writes racing on the shared tmp path
+					synchronized (this.saveLock)
 					{
-						if (this.blacklist.addPlayerName(profile.getName()))
+						// Add player to blacklist
+						if (this.config.getIdentifyMode() == IdentifyMode.NAME)
 						{
-							this.logger.info("Automatically added player name {} to the blacklist due to joining on banned IP", profile.getName());
-							this.saveList(this.blacklist);
+							if (this.blacklist.addPlayerName(profile.getName()))
+							{
+								this.logger.info("Automatically added player name {} to the blacklist due to joining on banned IP", profile.getName());
+								this.saveList(this.blacklist);
+							}
 						}
-					}
-					else
-					{
-						boolean updated = this.blacklist.computePlayerUUID(profile.getId(), (exists, oldName) -> {
-							var res = new PlayerList.PlayerUUIDComputeResult<Boolean>();
-							if (!exists || profile.getName() != null && (oldName == null || !oldName.equals(profile.getName())))
-							{
-								res.addNewValue = true;
-								res.newValue = profile.getName();
-								res.ret = true;
-								this.logger.info("Automatically added player UUID {} ({}) to the blacklist due to joining on banned IP", profile.getId(), profile.getName());
-							}
-							else
-							{
-								res.ret = false;
-							}
-							return res;
-						});
-						if (updated)
+						else
 						{
-							this.saveList(this.blacklist);
+							boolean updated = this.blacklist.computePlayerUUID(profile.getId(), (exists, oldName) -> {
+								var res = new PlayerList.PlayerUUIDComputeResult<Boolean>();
+								if (!exists || profile.getName() != null && (oldName == null || !oldName.equals(profile.getName())))
+								{
+									res.addNewValue = true;
+									res.newValue = profile.getName();
+									res.ret = true;
+									this.logger.info("Automatically added player UUID {} ({}) to the blacklist due to joining on banned IP", profile.getId(), profile.getName());
+								}
+								else
+								{
+									res.ret = false;
+								}
+								return res;
+							});
+							if (updated)
+							{
+								this.saveList(this.blacklist);
+							}
 						}
 					}
 				}
