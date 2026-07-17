@@ -83,25 +83,23 @@ public class WhitelistManager
 
 	public List<String> getValuesForRemovalSuggestion(PlayerList list)
 	{
-		switch (this.config.getIdentifyMode())
-		{
-			case NAME:
-				return list.getPlayerNames();
-			case UUID:
-				List<String> values = Lists.newArrayList();
-				var entries = list.getPlayerUuidMappingEntries();
-				entries.forEach(e -> values.add(e.getKey().toString()));
-				entries.forEach(e -> {
-					var name = e.getValue();
-					if (name != null)
-					{
-						values.add(name);
-					}
-				});
-				return values;
-			default:
-				throw new IllegalStateException("Unknown identify mode " + this.config.getIdentifyMode());
-		}
+	    return switch (this.config.getIdentifyMode())
+	    {
+	        case NAME -> list.getPlayerNames();
+	        case UUID -> {
+	            List<String> values = Lists.newArrayList();
+	            var entries = list.getPlayerUuidMappingEntries();
+	            entries.forEach(e -> values.add(e.getKey().toString()));
+	            entries.forEach(e -> {
+	                var name = e.getValue();
+	                if (name != null)
+	                {
+	                    values.add(name);
+	                }
+	            });
+	            yield values;
+	        }
+	    };
 	}
 
 	public List<String> getValuesForListing(PlayerList list)
@@ -169,32 +167,29 @@ public class WhitelistManager
 		// uuid: get from value directly, or mojang api (lookup by input value)
 		// profile: get from server online player, lookuped by input value (name / uuid)
 
-		switch (this.config.getIdentifyMode())
+		return switch (this.config.getIdentifyMode())
 		{
-			case NAME:
-				if (inputUuid.isPresent())
-				{
-					source.sendPlainMessage("WARN: Trying to use UUID in NAME mode. Nothing will happen");
-					return false;
-				}
-				return handleNameMode.handle(profile.map(GameProfile::getId).orElse(null), value);
-
-			case UUID:
-				// uuid == null, profile == null  ->  input is name, query mojang api failed
-				// uuid != null, profile == null  ->  input is uuid, player not online, query mojang api failed
-				// uuid == null, profile != null  ->  impossible
-				// uuid != null, profile != null  ->  input is uuid, player is online; input is name, player is online or query mojang api ok
-				if (uuid.isEmpty() && profile.isEmpty())
-				{
-					source.sendPlainMessage("WARN: Trying to use a player name in UUID mode, and the player is not valid. Nothing will happen");
-					return false;
-				}
-
-				UUID playerUuid = uuid.isPresent() ? uuid.get() : profile.get().getId();
-				String playerName = profile.map(GameProfile::getName).orElse(null);
-				return handleUuidMode.handle(playerUuid, playerName, pretty(playerUuid, playerName));
-		}
-		return false;
+		    case NAME -> {
+		        if (inputUuid.isPresent())
+		        {
+		            source.sendPlainMessage("WARN: Trying to use UUID in NAME mode. Nothing will happen");
+		            yield false;
+		        }
+		        yield handleNameMode.handle(profile.map(GameProfile::getId).orElse(null), value);
+		    }
+		
+		    case UUID -> {
+		        if (uuid.isEmpty() && profile.isEmpty())
+		        {
+		            source.sendPlainMessage("WARN: Trying to use a player name in UUID mode, and the player is not valid. Nothing will happen");
+		            yield false;
+		        }
+		
+		        UUID playerUuid = uuid.isPresent() ? uuid.get() : profile.get().getId();
+		        String playerName = profile.map(GameProfile::getName).orElse(null);
+		        yield handleUuidMode.handle(playerUuid, playerName, pretty(playerUuid, playerName));
+		    }
+		};
 	}
 
 	public boolean addPlayer(CommandSource source, PlayerList list, String value)
