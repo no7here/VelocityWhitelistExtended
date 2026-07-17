@@ -189,15 +189,16 @@ public class IpList
 					}
 					String rawIp = entry.toString().trim();
 					String cleanIp = stripScopeId(rawIp);
-					try
-					{
-						InetAddress addr = InetAddress.getByName(cleanIp);
-						this.ips.add(addr.getHostAddress());
-					}
-					catch (UnknownHostException e)
+					
+					// Strict offline IP-literal validation using Guava to prevent DNS name lookups or empty string resolution to loopback
+					if (!com.google.common.net.InetAddresses.isInetAddress(cleanIp))
 					{
 						logger.warn("Skipping invalid/unresolvable IP ban entry: {}", rawIp);
+						return;
 					}
+					
+					InetAddress addr = com.google.common.net.InetAddresses.forString(cleanIp);
+					this.ips.add(addr.getHostAddress());
 				});
 			}
 			this.loadOk = true;
