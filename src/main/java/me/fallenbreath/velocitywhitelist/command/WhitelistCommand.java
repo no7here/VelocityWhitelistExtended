@@ -50,13 +50,16 @@ public class WhitelistCommand
 				then(literal("reload").
 						executes(c -> reloadList(c.getSource(), list))
 				);
-		commandManager.register(new BrigadierCommand(root.build()));
+		var rootNode = root.build();
+		commandManager.register(new BrigadierCommand(rootNode));
 
 		for (int i = 1; i < roots.length; i++)
 		{
 			var alternative = literal(roots[i]).
 					requires(s -> s.hasPermission(PluginMeta.ID + ".command")).
-					redirect(root.build());
+					// a bare redirect node is not executable in brigadier, so the alias needs its own executes
+					executes(c -> showListStatus(c.getSource(), list)).
+					redirect(rootNode);
 
 			commandManager.register(new BrigadierCommand(alternative.build()));
 		}
