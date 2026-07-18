@@ -8,7 +8,7 @@ import me.fallenbreath.velocitywhitelist.WhitelistManager;
 import me.fallenbreath.velocitywhitelist.config.IpList;
 import net.kyori.adventure.text.Component;
 
-import java.net.InetAddress;
+import java.util.Optional;
 
 import static com.mojang.brigadier.arguments.StringArgumentType.getString;
 import static com.mojang.brigadier.arguments.StringArgumentType.string;
@@ -23,11 +23,11 @@ public class IpBanCommand
 		this.manager = whitelistManager;
 	}
 
-	@SuppressWarnings("deprecation")
+	@SuppressWarnings("deprecation")  // Next time for sure...
 	public void register(CommandManager commandManager)
 	{
 		var roots = new String[]{"ipban", "vipban"};
-		
+
 		var root = literal(roots[0]).
 				requires(s -> s.hasPermission(PluginMeta.ID + ".command")).
 				executes(c -> showStatus(c.getSource())).
@@ -61,6 +61,20 @@ public class IpBanCommand
 		}
 	}
 
+	/**
+	 * Parses the given command argument into a canonical IP literal.
+	 * Sends an error message to the command source and returns empty if the input is not a valid IP address
+	 */
+	private Optional<String> parseIpArgument(CommandSource source, String ipStr)
+	{
+		Optional<String> normalized = IpList.normalizeIpLiteral(ipStr);
+		if (normalized.isEmpty())
+		{
+			source.sendMessage(Component.text(String.format("Error: '%s' is not a valid IP address.", ipStr)));
+		}
+		return normalized;
+	}
+
 	private int showStatus(CommandSource source)
 	{
 		IpList list = this.manager.getIpBanList();
@@ -79,30 +93,23 @@ public class IpBanCommand
 			return 0;
 		}
 
-		// Strict Offline IP-literal validation using Guava's InetAddresses to prevent blocking DNS lookup races
-		String cleanIp = ipStr.trim();
-		int pct = cleanIp.indexOf('%');
-		String checkIp = pct != -1 ? cleanIp.substring(0, pct) : cleanIp;
-
-		if (!com.google.common.net.InetAddresses.isInetAddress(checkIp))
+		Optional<String> parsed = this.parseIpArgument(source, ipStr);
+		if (parsed.isEmpty())
 		{
-			source.sendMessage(Component.text(String.format("Error: '%s' is not a valid IP address.", ipStr)));
 			return 0;
 		}
-
-		InetAddress addr = com.google.common.net.InetAddresses.forString(checkIp);
-		String targetIp = addr.getHostAddress();
+		String targetIp = parsed.get();
 
 		synchronized (this.manager.getIpBanLock())
 		{
 			if (list.addIp(targetIp))
 			{
-				if (this.manager.saveIpList(list))
+				if (this.manager.saveList(list))
 				{
 					source.sendMessage(Component.text(String.format("Added IP %s to the IP ban list", targetIp)));
 
-					// Automatically disconnect anyone connected on that IP
-					this.manager.kickPlayersOnIp(targetIp);
+					// Automatically disconnect anyone connected on a banned IP
+					this.manager.kickIpBannedPlayers();
 					return 1;
 				}
 				else
@@ -127,25 +134,18 @@ public class IpBanCommand
 			return 0;
 		}
 
-		// Strict Offline IP-literal validation using Guava's InetAddresses to prevent blocking DNS lookup races
-		String cleanIp = ipStr.trim();
-		int pct = cleanIp.indexOf('%');
-		String checkIp = pct != -1 ? cleanIp.substring(0, pct) : cleanIp;
-
-		if (!com.google.common.net.InetAddresses.isInetAddress(checkIp))
+		Optional<String> parsed = this.parseIpArgument(source, ipStr);
+		if (parsed.isEmpty())
 		{
-			source.sendMessage(Component.text(String.format("Error: '%s' is not a valid IP address.", ipStr)));
 			return 0;
 		}
-
-		InetAddress addr = com.google.common.net.InetAddresses.forString(checkIp);
-		String targetIp = addr.getHostAddress();
+		String targetIp = parsed.get();
 
 		synchronized (this.manager.getIpBanLock())
 		{
 			if (list.removeIp(targetIp))
 			{
-				if (this.manager.saveIpList(list))
+				if (this.manager.saveList(list))
 				{
 					source.sendMessage(Component.text(String.format("Removed IP %s from the IP ban list", targetIp)));
 					return 1;
@@ -192,7 +192,7 @@ public class IpBanCommand
 			if (this.manager.loadIpList(list))
 			{
 				source.sendMessage(Component.text("IP ban list reloaded"));
-				
+
 				// Scan connected players and disconnect matching players who got banned in the reloaded file
 				this.manager.kickIpBannedPlayers();
 				return 1;
