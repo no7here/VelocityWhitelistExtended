@@ -22,4 +22,5 @@ ipban_enabled: true
 ipban_kick_message: Your IP address is banned from the server!
 # Controls whether players should be automatically blacklisted when they try join on a banned IP
 # WARNING: Recommended for online-mode proxies only. In offline mode, player identities are not verified, so anyone joining from a banned IP can get any player name blacklisted, allowing griefing of innocent players. 
+# On offline-mode proxies, this option is automatically disabled when the config is first generated or migrated.
 blacklist_on_ipban_join: true
