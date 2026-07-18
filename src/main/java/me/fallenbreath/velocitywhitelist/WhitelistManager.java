@@ -236,10 +236,7 @@ public class WhitelistManager
 		return this.operatePlayer(
 				source, value,
 				(uuid, playerName) -> {
-					if (isBlacklist)
-					{
-						this.server.getPlayer(playerName).ifPresent(this::handlePlayerAddedToBlacklist);
-					}
+					boolean added = false;
 
 					// Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
 					synchronized (this.saveLock)
@@ -248,62 +245,79 @@ public class WhitelistManager
 						{
 							if (this.saveList(list))
 							{
-								source.sendMessage(Component.text(String.format("Added player %s to the %s", playerName, list.getName())));
-								return true;
+								added = true;
 							}
 							else
 							{
 								list.removePlayerName(playerName); // rollback
 								source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
-								return false;
+								return false;  // the action was not applied, so no blacklist kick either
 							}
 						}
 					}
-					source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
-					return false;
-				},
-				(uuid, playerName, displayName) -> {
+
+					if (added)
+					{
+						source.sendMessage(Component.text(String.format("Added player %s to the %s", playerName, list.getName())));
+					}
+					else
+					{
+						source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
+					}
+
+					// Kick only once the blacklist state is confirmed: freshly added and saved, or already listed
 					if (isBlacklist)
 					{
-						this.server.getPlayer(uuid).ifPresent(this::handlePlayerAddedToBlacklist);
+						this.server.getPlayer(playerName).ifPresent(this::handlePlayerAddedToBlacklist);
 					}
+					return added;
+				},
+				(uuid, playerName, displayName) -> {
+					boolean addedNew;
+					boolean nameChanged;
+					PlayerList.UuidEntry oldEntry;
 
 					// Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
 					synchronized (this.saveLock)
 					{
-						PlayerList.UuidEntry oldEntry = list.peekPlayerUUID(uuid);
-						boolean addedNew = !oldEntry.exists();
-						boolean nameChanged = oldEntry.exists() && playerName != null && !playerName.equals(oldEntry.name());
+						oldEntry = list.peekPlayerUUID(uuid);
+						addedNew = !oldEntry.exists();
+						nameChanged = oldEntry.exists() && playerName != null && !playerName.equals(oldEntry.name());
 
-						if (!addedNew && !nameChanged)
+						if (addedNew || nameChanged)
 						{
-							source.sendMessage(Component.text(String.format("Player %s is already in the %s", displayName, list.getName())));
-							return false;
-						}
-
-						list.putPlayerUUID(uuid, playerName);
-						if (this.saveList(list))
-						{
-							if (addedNew)
+							list.putPlayerUUID(uuid, playerName);
+							if (!this.saveList(list))
 							{
-								source.sendMessage(Component.text(String.format("Added player %s to the %s", displayName, list.getName())));
+								this.rollbackUuidEntry(list, uuid, oldEntry);
+								source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
+								return false;  // the action was not applied, so no blacklist kick either
 							}
-							else
-							{
-								source.sendMessage(Component.text(String.format(
-										"Player %s is already in the %s, updated player name for this uuid from %s to %s",
-										displayName, list.getName(), oldEntry.name(), playerName
-								)));
-							}
-							return true;
-						}
-						else
-						{
-							this.rollbackUuidEntry(list, uuid, oldEntry);
-							source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())));
-							return false;
 						}
 					}
+
+					if (addedNew)
+					{
+						source.sendMessage(Component.text(String.format("Added player %s to the %s", displayName, list.getName())));
+					}
+					else if (nameChanged)
+					{
+						source.sendMessage(Component.text(String.format(
+								"Player %s is already in the %s, updated player name for this uuid from %s to %s",
+								displayName, list.getName(), oldEntry.name(), playerName
+						)));
+					}
+					else
+					{
+						source.sendMessage(Component.text(String.format("Player %s is already in the %s", displayName, list.getName())));
+					}
+
+					// Kick only once the blacklist state is confirmed: freshly added and saved, or already listed
+					if (isBlacklist)
+					{
+						this.server.getPlayer(uuid).ifPresent(this::handlePlayerAddedToBlacklist);
+					}
+					return addedNew || nameChanged;
 				}
 		);
 	}
