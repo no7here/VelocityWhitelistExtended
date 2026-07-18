@@ -174,30 +174,40 @@ public class IpList implements YamlStoredList<IpList>
 		synchronized (this.lock)
 		{
 			this.ips.clear();
-			if (options != null)
+			int skipped = 0;
+
+			Object ipsVal = options != null ? options.get("ips") : null;
+			if (ipsVal != null)
 			{
-				Object ipsVal = options.get("ips");
-				if (ipsVal != null)
+				// A present but non-list value means the file is structurally corrupt. Fail the whole load
+				// so a reload keeps the previous state, instead of silently replacing the list with an empty one
+				if (!(ipsVal instanceof List<?> list))
 				{
-					if (!(ipsVal instanceof List<?> list))
+					throw new IOException("The 'ips' field in the config is malformed (not a YAML list)");
+				}
+				for (Object entry : list)
+				{
+					if (entry == null)
 					{
-						throw new IOException("The 'ips' field in the config is malformed (not a YAML list)");
+						logger.warn("Skipping null/empty IP ban entry");
+						skipped++;
+						continue;
 					}
-					list.forEach(entry -> {
-						if (entry == null)
-						{
-							logger.warn("Skipping null/empty IP ban entry");
-							return;
-						}
-						String rawIp = entry.toString();
-						normalizeIpLiteral(rawIp).ifPresentOrElse(
-								this.ips::add,
-								() -> logger.warn("Skipping invalid IP ban entry: {}", rawIp)
-						);
-					});
+					String rawIp = entry.toString();
+					Optional<String> normalized = normalizeIpLiteral(rawIp);
+					if (normalized.isPresent())
+					{
+						this.ips.add(normalized.get());
+					}
+					else
+					{
+						logger.warn("Skipping invalid IP ban entry: {}", rawIp);
+						skipped++;
+					}
 				}
 			}
 			this.loadOk = true;
+			YamlStoredList.logSkippedEntries(logger, this.name, skipped);
 			logger.info("{} loaded with {} IP addresses", this.name, this.ips.size());
 		}
 	}
