@@ -44,7 +44,7 @@ public class PluginControlCommand
 		try
 		{
 			this.config.reload();
-boolean loaded = this.manager.loadLists();
+			boolean loaded = this.manager.loadLists();
 			this.manager.kickIpBannedPlayers();
 			if (loaded)
 			{
