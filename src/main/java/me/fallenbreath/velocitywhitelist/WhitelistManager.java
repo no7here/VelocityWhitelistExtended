@@ -465,8 +465,10 @@ public class WhitelistManager
 
 	/**
 	 * Automatically adds the given profile to the blacklist, in response to a join attempt from a banned IP.
-	 * Does nothing if the blacklist_on_ipban_join option is disabled, if the blacklist failed to load,
-	 * if the profile is already blacklisted with an up-to-date name, or if the rate limit quota is exhausted
+	 * Does nothing if the blacklist_on_ipban_join option is disabled - including when its uuid identify mode /
+	 * online mode requirements aren't met, see {@link Configuration#isBlacklistOnIpBanJoin()} - if the blacklist
+	 * failed to load, if the profile is already blacklisted with an up-to-date name, or if the rate limit quota
+	 * is exhausted
 	 */
 	private void autoBlacklistOnBannedIpJoin(GameProfile profile)
 	{
@@ -486,29 +488,20 @@ public class WhitelistManager
 			{
 				return;
 			}
-			switch (this.config.getIdentifyMode())
-			{
-				case NAME -> this.autoBlacklistByName(profile);
-				case UUID -> this.autoBlacklistByUuid(profile);
-			}
+			this.autoBlacklistByUuid(profile);
 		}
 	}
 
 	/**
-	 * Whether auto-blacklisting this profile requires a blacklist write:
-	 * the entry is missing, or (in uuid mode) its stored player name is outdated.
+	 * Whether auto-blacklisting this profile requires a blacklist write: the entry is missing,
+	 * or its stored player name is outdated. Auto-blacklist only ever runs in uuid identify mode
+	 * (see {@link Configuration#isBlacklistOnIpBanJoin()}), so only that lookup is needed here.
 	 * Must be called while holding {@link #saveLock}
 	 */
 	private boolean blacklistEntryNeedsUpdate(GameProfile profile)
 	{
-		return switch (this.config.getIdentifyMode())
-		{
-			case NAME -> !this.blacklist.checkPlayerName(profile.getName());
-			case UUID -> {
-				PlayerList.UuidEntry entry = this.blacklist.peekPlayerUUID(profile.getId());
-				yield !entry.exists() || (profile.getName() != null && !profile.getName().equals(entry.name()));
-			}
-		};
+		PlayerList.UuidEntry entry = this.blacklist.peekPlayerUUID(profile.getId());
+		return !entry.exists() || (profile.getName() != null && !profile.getName().equals(entry.name()));
 	}
 
 	/**
@@ -534,24 +527,6 @@ public class WhitelistManager
 			this.logger.warn("Skipping automatic blacklist additions due to rate-limit protection (IP ban is still enforced)");
 		}
 		return false;
-	}
-
-	/**
-	 * Must be called while holding {@link #saveLock}
-	 */
-	private void autoBlacklistByName(GameProfile profile)
-	{
-		if (this.blacklist.addPlayerName(profile.getName()))
-		{
-			if (this.saveList(this.blacklist))
-			{
-				this.logger.info("Automatically added player name {} to the blacklist due to joining on banned IP", profile.getName());
-			}
-			else
-			{
-				this.blacklist.removePlayerName(profile.getName()); // rollback on failed save
-			}
-		}
 	}
 
 	/**
