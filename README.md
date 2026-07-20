@@ -41,7 +41,7 @@ blacklist_kick_message: You are banned from the server!
 ipban_enabled: true
 # Message sent to players who join on a banned IP address
 ipban_kick_message: Your IP address is banned from the server!
-# Controls whether players should be automatically blacklisted when they try join on a banned IP
+# Controls whether players should be automatically blacklisted when they try to join from a banned IP
 # REQUIRES: identify_mode to be set to uuid & proxy to be in online mode, else it will be ignored.
 blacklist_on_ipban_join: true
 ```
