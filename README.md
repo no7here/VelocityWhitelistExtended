@@ -42,17 +42,27 @@ ipban_enabled: true
 # Message sent to players who join on a banned IP address
 ipban_kick_message: Your IP address is banned from the server!
 # Controls whether players should be automatically blacklisted when they try join on a banned IP
-# WARNING: Recommended for online-mode proxies only. In offline mode, player identities are not verified, so anyone joining from a banned IP can get any player name blacklisted, allowing griefing of innocent players.
-# On offline-mode proxies, this option is automatically disabled when the config is first generated or migrated.
+# REQUIRES: identify_mode to be set to uuid & proxy to be in online mode, else it will be ignored.
 blacklist_on_ipban_join: true
 ```
 
 > [!WARNING]
-> `blacklist_on_ipban_join` should NOT be enabled on offline-mode proxies.
-> 
-> In offline mode, player identities aren't verified by Mojang, so anyone connecting from a banned IP can set *any* player name and get it blacklisted, allowing attackers to grief innocent players.
->
-> On first startup and when migrating an old config, the plugin detects if the server is in offline mode and disables this option automatically. If it's enabled manually on an offline-mode proxy, a warning message will be printed on startup.
+> `blacklist_on_ipban_join` requires `identify_mode: uuid` **and** an online-mode proxy, else it will be ignored. 
+> <hr>
+> <details>
+> <summary><i>Why does <code>blacklist_on_ipban_join</code> require an online proxy and UUID?</i></summary>
+> <hr>
+> <b>TL;DR:</b> Not doing so would allow an attacker to get any player name banned by connecting through a banned IP, including server administrators.
+> <br><br>
+> If either condition isn't true, player identities cannot be verified and an attacker can use a banned IP with an arbitrary player name and get it blacklisted. 
+> <br><br>
+> To prevent this, if the requirement isn't met, whether at first startup, after config migration or after any config reload, the plugin will force this option off in memory regardless of what's written in this file and print a warning explaining which requirement is missing.
+> <br><br>
+> This requirement means that to even try connecting to the proxy, an attacker must use <u>valid</u> Mojang accounts that have purchased Minecraft to attack, which makes it significantly more expensive and annoying to bypass versus the standard IP ban or account blacklist, or even a standard combination of them both.  
+> <br><br>
+> Ultimately, this feature is designed to act as a deterrence to would-be attackers / griefers and make a moderator's life easier. Just like anti-cheats, no anti-ban-bypass counter-measure is perfect. 
+> </details>
+> <hr>
 
 #### 📁 Whitelist & Blacklist
 `plugins/velocitywhitelist/whitelist.yml` // `plugins/velocitywhitelist/blacklist.yml`
@@ -101,4 +111,3 @@ Requires the permission `velocitywhitelist.command`.
 **Plugin Control:** 
 - `/velocitywhitelist` - Show plugin information.
 - `/velocitywhitelist reload` - Reload config, whitelist, blacklist & IP ban files.
-
