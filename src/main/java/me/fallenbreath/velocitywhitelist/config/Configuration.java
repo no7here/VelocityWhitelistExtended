@@ -18,13 +18,29 @@ public class Configuration
 {
 	private static final int CONFIG_VERSION = 2;
 
-	// Replaced atomically on every (re)load, so login-time readers never observe a partially populated config
-	private volatile Map<String, Object> options = Collections.emptyMap();
+	/**
+	 * Bundles every field derived from a single load/reload, so it can be published as one unit
+	 */
+	private static final class Snapshot
+	{
+		private static final Snapshot EMPTY = new Snapshot(Collections.emptyMap(), IdentifyMode.DEFAULT);
+
+		private final Map<String, Object> options;
+		private final IdentifyMode identifyMode;
+
+		private Snapshot(Map<String, Object> options, IdentifyMode identifyMode)
+		{
+			this.options = options;
+			this.identifyMode = identifyMode;
+		}
+	}
+
+	// Replaced atomically on every (re)load with a single volatile write, so login-time readers
+	// never observe options and identifyMode from two different loads mixed together
+	private volatile Snapshot snapshot = Snapshot.EMPTY;
 	private final Logger logger;
 	private final Path configFilePath;
 	private final Supplier<Boolean> proxyOnlineModeGetter;
-
-	private volatile IdentifyMode identifyMode = IdentifyMode.DEFAULT;
 
 	public Configuration(Logger logger, Path configFilePath, Supplier<Boolean> proxyOnlineModeGetter)
 	{
@@ -46,9 +62,9 @@ public class Configuration
 			stagedOptions.putAll(loadedOptions);
 		}
 		stagedOptions = this.migrate(stagedOptions);
+		stagedOptions = Collections.unmodifiableMap(stagedOptions);
 
-		this.options = Collections.unmodifiableMap(stagedOptions);
-		this.identifyMode = this.makeIdentifyMode();
+		this.snapshot = new Snapshot(stagedOptions, makeIdentifyMode(stagedOptions, this.logger));
 		this.warnAboutRiskyOptions();
 	}
 
@@ -117,28 +133,29 @@ public class Configuration
 	 * identify_mode, on a proxy that's genuinely running in online mode. Both are hard-required - checked
 	 * here rather than trusted from config - so a bad config can't silently reopen the risk.
 	 */
-	private boolean meetsBlacklistOnIpBanJoinRequirements()
+	private boolean meetsBlacklistOnIpBanJoinRequirements(IdentifyMode identifyMode)
 	{
-		return this.identifyMode == IdentifyMode.UUID && this.isProxyOnlineMode();
+		return identifyMode == IdentifyMode.UUID && this.isProxyOnlineMode();
 	}
 
-	private boolean isBlacklistOnIpBanJoinConfigured()
+	private static boolean isBlacklistOnIpBanJoinConfigured(Map<String, Object> options)
 	{
-		Object opt = this.options.get("blacklist_on_ipban_join");
+		Object opt = options.get("blacklist_on_ipban_join");
 		return opt instanceof Boolean && (Boolean)opt;
 	}
 
 	private void warnAboutRiskyOptions()
 	{
-		if (!this.isBlacklistOnIpBanJoinConfigured() || this.meetsBlacklistOnIpBanJoinRequirements())
+		Snapshot snapshot = this.snapshot;
+		if (!isBlacklistOnIpBanJoinConfigured(snapshot.options) || this.meetsBlacklistOnIpBanJoinRequirements(snapshot.identifyMode))
 		{
 			return;
 		}
 
 		this.logger.warn("blacklist_on_ipban_join is enabled in the config, but its requirements are not met, so it has been forced off:");
-		if (this.identifyMode != IdentifyMode.UUID)
+		if (snapshot.identifyMode != IdentifyMode.UUID)
 		{
-			this.logger.warn("- identify_mode must be uuid (currently: {})", this.identifyMode.name().toLowerCase());
+			this.logger.warn("- identify_mode must be uuid (currently: {})", snapshot.identifyMode.name().toLowerCase());
 		}
 		if (!this.isProxyOnlineMode())
 		{
@@ -152,9 +169,9 @@ public class Configuration
 		return this.proxyOnlineModeGetter.get();
 	}
 
-	private IdentifyMode makeIdentifyMode()
+	private static IdentifyMode makeIdentifyMode(Map<String, Object> options, Logger logger)
 	{
-		Object mode = this.options.get("identify_mode");
+		Object mode = options.get("identify_mode");
 		if (mode instanceof String)
 		{
 			try
@@ -163,7 +180,7 @@ public class Configuration
 			}
 			catch (IllegalArgumentException e)
 			{
-				this.logger.warn("Invalid identify mode: {}, use default value {}", mode, IdentifyMode.DEFAULT.name().toLowerCase());
+				logger.warn("Invalid identify mode: {}, use default value {}", mode, IdentifyMode.DEFAULT.name().toLowerCase());
 			}
 		}
 		return IdentifyMode.DEFAULT;
@@ -171,7 +188,7 @@ public class Configuration
 
 	public boolean isWhitelistEnabled()
 	{
-		Object enabled = this.options.get("whitelist_enabled");
+		Object enabled = this.snapshot.options.get("whitelist_enabled");
 		if (enabled instanceof Boolean)
 		{
 			return (Boolean)enabled;
@@ -181,7 +198,7 @@ public class Configuration
 
 	public boolean isBlacklistEnabled()
 	{
-		Object enabled = this.options.get("blacklist_enabled");
+		Object enabled = this.snapshot.options.get("blacklist_enabled");
 		if (enabled instanceof Boolean)
 		{
 			return (Boolean)enabled;
@@ -191,7 +208,7 @@ public class Configuration
 
 	public boolean isIpBanEnabled()
 	{
-		Object enabled = this.options.get("ipban_enabled");
+		Object enabled = this.snapshot.options.get("ipban_enabled");
 		if (enabled instanceof Boolean)
 		{
 			return (Boolean)enabled;
@@ -201,17 +218,18 @@ public class Configuration
 
 	public boolean isBlacklistOnIpBanJoin()
 	{
-		return this.isBlacklistOnIpBanJoinConfigured() && this.meetsBlacklistOnIpBanJoinRequirements();
+		Snapshot snapshot = this.snapshot;
+		return isBlacklistOnIpBanJoinConfigured(snapshot.options) && this.meetsBlacklistOnIpBanJoinRequirements(snapshot.identifyMode);
 	}
 
 	public IdentifyMode getIdentifyMode()
 	{
-		return this.identifyMode;
+		return this.snapshot.identifyMode;
 	}
 
 	public String getWhitelistKickMessage()
 	{
-		Object message = this.options.get("whitelist_kick_message");
+		Object message = this.snapshot.options.get("whitelist_kick_message");
 		if (message instanceof String)
 		{
 			return (String)message;
@@ -221,7 +239,7 @@ public class Configuration
 
 	public String getBlacklistKickMessage()
 	{
-		Object message = this.options.get("blacklist_kick_message");
+		Object message = this.snapshot.options.get("blacklist_kick_message");
 		if (message instanceof String)
 		{
 			return (String)message;
@@ -231,7 +249,7 @@ public class Configuration
 
 	public String getIpBanKickMessage()
 	{
-		Object message = this.options.get("ipban_kick_message");
+		Object message = this.snapshot.options.get("ipban_kick_message");
 		if (message instanceof String)
 		{
 			return (String)message;
