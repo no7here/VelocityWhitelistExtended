@@ -98,13 +98,7 @@ public class Configuration
 		newOptions.put("blacklist_kick_message", option(options, "blacklist_kick_message", "You are banned from the server!"));
 		newOptions.put("ipban_enabled", option(options, "ipban_enabled", true));
 		newOptions.put("ipban_kick_message", option(options, "ipban_kick_message", "Your IP address is banned from the server!"));
-
-		Object blacklistOnIpBanJoin = options.get("blacklist_on_ipban_join");
-		if (blacklistOnIpBanJoin == null)
-		{
-			blacklistOnIpBanJoin = this.defaultBlacklistOnIpBanJoin();
-		}
-		newOptions.put("blacklist_on_ipban_join", blacklistOnIpBanJoin);
+		newOptions.put("blacklist_on_ipban_join", option(options, "blacklist_on_ipban_join", true));
 
 		try
 		{
@@ -117,33 +111,40 @@ public class Configuration
 		return newOptions;
 	}
 
-	private boolean defaultBlacklistOnIpBanJoin()
+	/**
+	 * blacklist_on_ipban_join lets an unauthenticated network peer (anyone joining from a banned IP)
+	 * trigger a blacklist write, so it's only safe when player identities are actually verified: uuid
+	 * identify_mode, on a proxy that's genuinely running in online mode. Both are hard-required - checked
+	 * here rather than trusted from config - so a bad config can't silently reopen the risk.
+	 */
+	private boolean meetsBlacklistOnIpBanJoinRequirements()
 	{
-		if (this.isProxyOnlineMode())
-		{
-			return true;
-		}
-		logOfflineModeAutoDisable(this.logger);
-		return false;
+		return this.identifyMode == IdentifyMode.UUID && this.isProxyOnlineMode();
 	}
 
-	/**
-	 * Shared warning for the two places that flip blacklist_on_ipban_join off for offline-mode proxies:
-	 * config migration, and fresh config generation in the plugin bootstrap
-	 */
-	public static void logOfflineModeAutoDisable(Logger logger)
+	private boolean isBlacklistOnIpBanJoinConfigured()
 	{
-		logger.warn("Detected that the proxy is running in offline mode - blacklist on IP ban was automatically disabled to prevent griefing");
-		logger.warn("Check the config comments / README on GitHub for more information: {}", PluginMeta.REPOSITORY_URL);
+		Object opt = this.options.get("blacklist_on_ipban_join");
+		return opt instanceof Boolean && (Boolean)opt;
 	}
 
 	private void warnAboutRiskyOptions()
 	{
-		if (this.isBlacklistOnIpBanJoin() && !this.isProxyOnlineMode())
+		if (!this.isBlacklistOnIpBanJoinConfigured() || this.meetsBlacklistOnIpBanJoinRequirements())
 		{
-			this.logger.warn("blacklist_on_ipban_join is enabled, but the proxy is running in offline mode!");
-			this.logger.warn("In offline mode player identities are not verified, so anyone joining from a banned IP can get an arbitrary player name blacklisted. See the config comments / README for more information");
+			return;
 		}
+
+		this.logger.warn("blacklist_on_ipban_join is enabled in the config, but its requirements are not met, so it has been forced off:");
+		if (this.identifyMode != IdentifyMode.UUID)
+		{
+			this.logger.warn("- identify_mode must be uuid (currently: {})", this.identifyMode.name().toLowerCase());
+		}
+		if (!this.isProxyOnlineMode())
+		{
+			this.logger.warn("- the proxy must be running in online mode");
+		}
+		this.logger.warn("Unverified identities would let anyone joining from a banned IP get an arbitrary name/account blacklisted. See the config comments / README for more information: {}", PluginMeta.REPOSITORY_URL);
 	}
 
 	private boolean isProxyOnlineMode()
@@ -200,12 +201,7 @@ public class Configuration
 
 	public boolean isBlacklistOnIpBanJoin()
 	{
-		Object opt = this.options.get("blacklist_on_ipban_join");
-		if (opt instanceof Boolean)
-		{
-			return (Boolean)opt;
-		}
-		return false;
+		return this.isBlacklistOnIpBanJoinConfigured() && this.meetsBlacklistOnIpBanJoinRequirements();
 	}
 
 	public IdentifyMode getIdentifyMode()
