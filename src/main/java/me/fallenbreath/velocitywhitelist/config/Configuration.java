@@ -114,7 +114,7 @@ public class Configuration
 		newOptions.put("blacklist_kick_message", option(options, "blacklist_kick_message", "You are banned from the server!"));
 		newOptions.put("ipban_enabled", option(options, "ipban_enabled", true));
 		newOptions.put("ipban_kick_message", option(options, "ipban_kick_message", "Your IP address is banned from the server!"));
-		newOptions.put("blacklist_on_ipban_join", option(options, "blacklist_on_ipban_join", true));
+		newOptions.put("blacklist_on_ipban_join", option(options, "blacklist_on_ipban_join", false));
 
 		try
 		{
