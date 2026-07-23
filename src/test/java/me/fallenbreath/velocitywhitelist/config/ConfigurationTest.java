@@ -14,6 +14,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,6 +36,25 @@ class ConfigurationTest
 		config.isWhitelistEnabled();
 
 		verify(logger, atLeastOnce()).warn(anyString(), any(), any());
+	}
+
+	@Test
+	void whitelistEnabled_withNonBooleanValue_warnsOnceOnLoad_notOnEveryGetterCall(@TempDir Path tempDir)
+	{
+		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
+
+		// isWhitelistEnabled/isBlacklistEnabled/isIpBanEnabled are read on every single login via
+		// each list's isActivated(), so warning from the getter itself would repeat on every
+		// connection instead of once per config load - the warning must fire during load(), and
+		// repeated getter calls afterwards must not add more warnings.
+		config.load("version: 2\nwhitelist_enabled: \"true\"\nblacklist_enabled: true\nipban_enabled: true\n");
+		verify(logger, times(1)).warn(anyString(), any(), any());
+
+		config.isWhitelistEnabled();
+		config.isWhitelistEnabled();
+		config.isWhitelistEnabled();
+
+		verify(logger, times(1)).warn(anyString(), any(), any());
 	}
 
 	@Test

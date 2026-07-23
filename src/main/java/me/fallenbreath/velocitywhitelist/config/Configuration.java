@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -68,6 +69,7 @@ public class Configuration
 
 		this.snapshot = new Snapshot(stagedOptions, makeIdentifyMode(stagedOptions, this.logger));
 		this.warnAboutRiskyOptions();
+		this.warnAboutInvalidBooleanOptions();
 	}
 
 	public void reload() throws IOException
@@ -189,6 +191,26 @@ public class Configuration
 		return this.proxyOnlineModeGetter.get();
 	}
 
+	/**
+	 * Warns once per load/reload about any boolean option that's present but not actually a
+	 * Boolean (e.g. a hand-quoted "true" string parses as a String under SnakeYAML). This must run
+	 * here rather than from the getters themselves: isWhitelistEnabled/isBlacklistEnabled/
+	 * isIpBanEnabled are read on every single login via each list's isActivated(), so a warning in
+	 * the getter would repeat on every connection instead of once per config load
+	 */
+	private void warnAboutInvalidBooleanOptions()
+	{
+		Map<String, Object> options = this.snapshot.options;
+		for (String key : List.of("whitelist_enabled", "blacklist_enabled", "ipban_enabled"))
+		{
+			Object value = options.get(key);
+			if (value != null && !(value instanceof Boolean))
+			{
+				this.logger.warn("Invalid value for {}: {} (expected true/false), treating as disabled", key, value);
+			}
+		}
+	}
+
 	private static IdentifyMode makeIdentifyMode(Map<String, Object> options, Logger logger)
 	{
 		Object mode = options.get("identify_mode");
@@ -222,23 +244,15 @@ public class Configuration
 	}
 
 	/**
-	 * Reads a boolean config option, warning rather than failing silently if it's present but not
-	 * actually a Boolean (e.g. a hand-quoted "true" string parses as a String under SnakeYAML).
-	 * These options gate whitelist/blacklist/IP-ban enforcement, so silently treating a typo as
-	 * "disabled" would fail toward the permissive direction with zero diagnostic
+	 * Reads a boolean config option, defaulting to false (disabled) if it's absent or not actually
+	 * a Boolean. Invalid values are warned about once per load in warnAboutInvalidBooleanOptions(),
+	 * not here: this getter is called on every single login (via each list's isActivated()), so it
+	 * must stay a pure read with no logging side effect
 	 */
 	private boolean getBooleanOption(String key)
 	{
 		Object value = this.snapshot.options.get(key);
-		if (value instanceof Boolean b)
-		{
-			return b;
-		}
-		if (value != null)
-		{
-			this.logger.warn("Invalid value for {}: {} (expected true/false), treating as disabled", key, value);
-		}
-		return false;
+		return value instanceof Boolean b && b;
 	}
 
 	public boolean isBlacklistOnIpBanJoin()
