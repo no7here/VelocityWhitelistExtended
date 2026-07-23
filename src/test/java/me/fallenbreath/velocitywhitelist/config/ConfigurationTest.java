@@ -9,9 +9,11 @@ import org.slf4j.Logger;
 
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -67,7 +69,31 @@ class ConfigurationTest
 		// be treated as legacy and re-migrated (including rewriting the file) on every load.
 		config.load("version: \"2\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
 
-		verify(logger, never()).warn(org.mockito.ArgumentMatchers.eq("Migrating config file from {} to v{}"), any(), any());
+		verify(logger, never()).warn(eq("Migrating config file from {} to v{}"), any(), any());
+	}
+
+	@Test
+	void migrate_acceptsOversizedQuotedVersion_withoutThrowing(@TempDir Path tempDir)
+	{
+		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
+
+		// A digit-only quoted version larger than Integer.MAX_VALUE still matches the "\\d+" check,
+		// so Integer.parseInt(s) would throw NumberFormatException and fail the entire config load
+		// instead of just treating it as an already-current (if nonsensical) version.
+		assertDoesNotThrow(() -> config.load("version: \"99999999999999999999\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n"));
+		verify(logger, never()).warn(eq("Migrating config file from {} to v{}"), any(), any());
+	}
+
+	@Test
+	void blacklistOnIpBanJoin_withNonBooleanValue_shouldWarn(@TempDir Path tempDir)
+	{
+		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
+
+		// blacklist_on_ipban_join is a boolean option just like whitelist_enabled/blacklist_enabled/
+		// ipban_enabled, and warnAboutInvalidBooleanOptions() must cover it too, not just the other three.
+		config.load("version: 2\nidentify_mode: uuid\nblacklist_on_ipban_join: \"true\"\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
+
+		verify(logger, atLeastOnce()).warn(anyString(), any(), any());
 	}
 
 	@Test

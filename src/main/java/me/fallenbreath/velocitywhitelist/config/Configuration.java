@@ -100,7 +100,17 @@ public class Configuration
 		}
 		if (versionObj instanceof String s && s.matches("\\d+"))
 		{
-			return Integer.parseInt(s);
+			try
+			{
+				return Integer.parseInt(s);
+			}
+			catch (NumberFormatException e)
+			{
+				// A digit-only string too large to fit in an int is necessarily >= CONFIG_VERSION,
+				// so treat it the same as any other already-current version rather than letting the
+				// whole config load fail over an oversized (if nonsensical) version number
+				return Integer.MAX_VALUE;
+			}
 		}
 		return 0;
 	}
@@ -201,7 +211,7 @@ public class Configuration
 	private void warnAboutInvalidBooleanOptions()
 	{
 		Map<String, Object> options = this.snapshot.options;
-		for (String key : List.of("whitelist_enabled", "blacklist_enabled", "ipban_enabled"))
+		for (String key : List.of("whitelist_enabled", "blacklist_enabled", "ipban_enabled", "blacklist_on_ipban_join"))
 		{
 			Object value = options.get(key);
 			if (value != null && !(value instanceof Boolean))
