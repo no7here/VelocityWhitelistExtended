@@ -81,13 +81,20 @@ public class IpList implements YamlStoredList<IpList>
 	}
 
 	/**
-	 * Strictly parses an IP literal (IPv4 or IPv6, optionally with a %scope suffix)
+	 * Strictly parses an IP literal (IPv4 or IPv6, optionally bracketed and/or with a %scope suffix)
 	 * into its canonical textual form, e.g. "2001:DB8::1" -> "2001:db8:0:0:0:0:0:1".
 	 * Returns empty for anything else (hostnames, malformed input), so no DNS lookup can ever happen
 	 */
 	public static Optional<String> normalizeIpLiteral(String ipStr)
 	{
-		String cleanIp = stripScopeId(ipStr.trim());
+		String cleanIp = ipStr.trim();
+		// Bracket notation ("[::1]") is how IPv6 addresses appear in URLs and in "[addr]:port"
+		// log lines, so it's worth accepting even though it's not a literal IP by itself
+		if (cleanIp.length() >= 2 && cleanIp.startsWith("[") && cleanIp.endsWith("]"))
+		{
+			cleanIp = cleanIp.substring(1, cleanIp.length() - 1);
+		}
+		cleanIp = stripScopeId(cleanIp);
 		if (InetAddresses.isInetAddress(cleanIp))
 		{
 			return Optional.of(InetAddresses.forString(cleanIp).getHostAddress());
