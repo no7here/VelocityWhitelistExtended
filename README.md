@@ -1,6 +1,8 @@
 ### 📄 VelocityWhitelistExtended
 A fork of TISUnion's [VelocityWhitelist](https://github.com/TISUnion/VelocityWhitelist), with improved performance, reliability and IP ban support.
 
+> Tested on Velocity `4.1.0-SNAPSHOT` (Build 9).
+
 ***
 #### 🪛 Changes
 A list of what's changed versus the original plugin.
