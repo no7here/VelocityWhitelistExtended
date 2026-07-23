@@ -12,7 +12,6 @@ import java.util.UUID;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
-import org.yaml.snakeyaml.Yaml;
 
 import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableList;
@@ -185,10 +184,13 @@ public class PlayerList implements YamlStoredList<PlayerList>
 	@SuppressWarnings("unchecked")
 	public void load(Logger logger) throws IOException
 	{
-		Map<String, Object> options = Maps.newHashMap();
 		String yamlContent = Files.readString(this.filePath);
 
-		options = new Yaml().loadAs(yamlContent, options.getClass());
+		// Plain load() + cast rather than loadAs(..., HashMap.class): loadAs asks SafeConstructor to
+		// construct the root via an explicit "!!java.util.HashMap" tag, which isn't on its safe
+		// allowlist (only implicit/core YAML tags like a plain mapping are) and throws. An empty file
+		// parses to null, same as Configuration's config.yml handling.
+		Map<String, Object> options = (Map<String, Object>)FileUtils.newSafeYaml().load(yamlContent);
 
 		synchronized (this.lock)
 		{

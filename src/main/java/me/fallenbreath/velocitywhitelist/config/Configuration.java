@@ -7,7 +7,6 @@ import java.util.Collections;
 import java.util.Map;
 
 import org.slf4j.Logger;
-import org.yaml.snakeyaml.Yaml;
 
 import com.google.common.base.Supplier;
 import com.google.common.collect.Maps;
@@ -56,7 +55,7 @@ public class Configuration
 	{
 		// Parse and migrate into a staging map before publishing, so a malformed config during a reload
 		// keeps the previous state enforced, and concurrent logins never see a half-built option set
-		Map<String, Object> loadedOptions = (Map<String, Object>)new Yaml().load(yamlContent);
+		Map<String, Object> loadedOptions = (Map<String, Object>)FileUtils.newSafeYaml().load(yamlContent);
 
 		Map<String, Object> stagedOptions = Maps.newLinkedHashMap();
 		if (loadedOptions != null)  // an empty config file parses to null
