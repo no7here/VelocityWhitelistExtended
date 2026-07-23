@@ -21,8 +21,18 @@ java {
 dependencies {
     compileOnly "com.velocitypowered:velocity-api:${project.velocity_api_version}"
     annotationProcessor "com.velocitypowered:velocity-api:${project.velocity_api_version}"
+
+    testImplementation "com.velocitypowered:velocity-api:${project.velocity_api_version}"
+    testImplementation platform('org.junit:junit-bom:5.10.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.mockito:mockito-core:5.11.0'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.11.0'
 }
 
 test {
     useJUnitPlatform()
+    // Fixed port (rather than an ephemeral one) so the value is known before the JVM starts:
+    // MojangAPI caches this into a `static final` field at class-init time, so the property
+    // must be set before that class is first touched, not from within a running test.
+    systemProperty 'velocitywhitelist.mojang.accountserver', 'http://127.0.0.1:18765/users/profiles/minecraft/'
 }
