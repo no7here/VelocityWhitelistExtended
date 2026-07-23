@@ -85,6 +85,24 @@ public class Configuration
 	}
 
 	/**
+	 * Parses a config version value that should be a YAML Number, but also accepts a hand-quoted
+	 * numeric string (e.g. `version: "2"`) so an already-current config doesn't get misdetected as
+	 * legacy and needlessly re-migrated (including rewriting the file) on every load
+	 */
+	private static int parseVersion(Object versionObj)
+	{
+		if (versionObj instanceof Number number)
+		{
+			return number.intValue();
+		}
+		if (versionObj instanceof String s && s.matches("\\d+"))
+		{
+			return Integer.parseInt(s);
+		}
+		return 0;
+	}
+
+	/**
 	 * Migrates the given staging options to the current config version, returning the map to publish
 	 */
 	private Map<String, Object> migrate(Map<String, Object> options)
@@ -94,7 +112,7 @@ public class Configuration
 		{
 			versionObj = options.get("version");
 		}
-		int version = versionObj instanceof Number number ? number.intValue() : 0;
+		int version = parseVersion(versionObj);
 		if (version >= CONFIG_VERSION)
 		{
 			return options;
@@ -189,30 +207,35 @@ public class Configuration
 
 	public boolean isWhitelistEnabled()
 	{
-		Object enabled = this.snapshot.options.get("whitelist_enabled");
-		if (enabled instanceof Boolean)
-		{
-			return (Boolean)enabled;
-		}
-		return false;
+		return this.getBooleanOption("whitelist_enabled");
 	}
 
 	public boolean isBlacklistEnabled()
 	{
-		Object enabled = this.snapshot.options.get("blacklist_enabled");
-		if (enabled instanceof Boolean)
-		{
-			return (Boolean)enabled;
-		}
-		return false;
+		return this.getBooleanOption("blacklist_enabled");
 	}
 
 	public boolean isIpBanEnabled()
 	{
-		Object enabled = this.snapshot.options.get("ipban_enabled");
-		if (enabled instanceof Boolean)
+		return this.getBooleanOption("ipban_enabled");
+	}
+
+	/**
+	 * Reads a boolean config option, warning rather than failing silently if it's present but not
+	 * actually a Boolean (e.g. a hand-quoted "true" string parses as a String under SnakeYAML).
+	 * These options gate whitelist/blacklist/IP-ban enforcement, so silently treating a typo as
+	 * "disabled" would fail toward the permissive direction with zero diagnostic
+	 */
+	private boolean getBooleanOption(String key)
+	{
+		Object value = this.snapshot.options.get(key);
+		if (value instanceof Boolean b)
 		{
-			return (Boolean)enabled;
+			return b;
+		}
+		if (value != null)
+		{
+			this.logger.warn("Invalid value for {}: {} (expected true/false), treating as disabled", key, value);
 		}
 		return false;
 	}

@@ -28,14 +28,13 @@ class ConfigurationTest
 		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
 
 		// A hand-edited config quoting the boolean (`whitelist_enabled: "true"`) parses as a
-		// String under SnakeYAML, not a Boolean. isWhitelistEnabled() currently swallows this
-		// with zero log output and just returns false - silently turning off the whitelist
-		// with no diagnostic at all, unlike the identify_mode handling a few lines away in the
-		// same class, which does warn on an unrecognised value.
+		// String under SnakeYAML, not a Boolean. isWhitelistEnabled() must not swallow this with
+		// zero log output and silently turn off the whitelist with no diagnostic at all - it
+		// should warn, same as the identify_mode handling a few lines away in the same class.
 		config.load("version: 2\nwhitelist_enabled: \"true\"\nblacklist_enabled: true\nipban_enabled: true\n");
 		config.isWhitelistEnabled();
 
-		verify(logger, atLeastOnce()).warn(anyString(), any(Object[].class));
+		verify(logger, atLeastOnce()).warn(anyString(), any(), any());
 	}
 
 	@Test
@@ -43,9 +42,9 @@ class ConfigurationTest
 	{
 		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
 
-		// version detection only accepts a YAML Number for "version"/"_version". A hand-quoted
-		// `version: "2"` parses as a String, so an already-current config gets silently treated
-		// as legacy and re-migrated (including rewriting the file) on every single load.
+		// version detection must not only accept a YAML Number for "version"/"_version" - a
+		// hand-quoted `version: "2"` parses as a String, and an already-current config must not
+		// be treated as legacy and re-migrated (including rewriting the file) on every load.
 		config.load("version: \"2\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
 
 		verify(logger, never()).warn(org.mockito.ArgumentMatchers.eq("Migrating config file from {} to v{}"), any(), any());
