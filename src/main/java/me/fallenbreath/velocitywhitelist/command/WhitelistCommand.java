@@ -1,17 +1,20 @@
 package me.fallenbreath.velocitywhitelist.command;
 
+import static com.mojang.brigadier.arguments.StringArgumentType.getString;
+import static com.mojang.brigadier.arguments.StringArgumentType.word;
+import static me.fallenbreath.velocitywhitelist.command.CommandUtils.argument;
+import static me.fallenbreath.velocitywhitelist.command.CommandUtils.literal;
+import static me.fallenbreath.velocitywhitelist.command.CommandUtils.suggestMatching;
+
 import com.google.common.base.Joiner;
 import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandSource;
+
 import me.fallenbreath.velocitywhitelist.PluginMeta;
 import me.fallenbreath.velocitywhitelist.WhitelistManager;
 import me.fallenbreath.velocitywhitelist.config.PlayerList;
 import net.kyori.adventure.text.Component;
-
-import static com.mojang.brigadier.arguments.StringArgumentType.getString;
-import static com.mojang.brigadier.arguments.StringArgumentType.word;
-import static me.fallenbreath.velocitywhitelist.command.CommandUtils.*;
 
 public class WhitelistCommand
 {
@@ -50,13 +53,16 @@ public class WhitelistCommand
 				then(literal("reload").
 						executes(c -> reloadList(c.getSource(), list))
 				);
-		commandManager.register(new BrigadierCommand(root.build()));
+		var rootNode = root.build();
+		commandManager.register(new BrigadierCommand(rootNode));
 
 		for (int i = 1; i < roots.length; i++)
 		{
 			var alternative = literal(roots[i]).
 					requires(s -> s.hasPermission(PluginMeta.ID + ".command")).
-					redirect(root.build());
+					// a bare redirect node is not executable in brigadier, so the alias needs its own executes
+					executes(c -> showListStatus(c.getSource(), list)).
+					redirect(rootNode);
 
 			commandManager.register(new BrigadierCommand(alternative.build()));
 		}
@@ -89,9 +95,8 @@ public class WhitelistCommand
 			return 0;
 		}
 
-		if (this.manager.addPlayer(source, list,playerName))
+		if (this.manager.addPlayer(source, list, playerName))
 		{
-			this.manager.saveList(list);
 			return 1;
 		}
 		return 0;
@@ -107,7 +112,6 @@ public class WhitelistCommand
 
 		if (this.manager.removePlayer(source, list, playerName))
 		{
-			this.manager.saveList(list);
 			return 1;
 		}
 		return 0;

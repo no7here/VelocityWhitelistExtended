@@ -1,5 +1,14 @@
 package me.fallenbreath.velocitywhitelist;
 
+import java.io.File;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Objects;
+
+import org.slf4j.Logger;
+
 import com.google.inject.Inject;
 import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.connection.LoginEvent;
@@ -7,22 +16,17 @@ import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
+
+import me.fallenbreath.velocitywhitelist.command.IpBanCommand;
 import me.fallenbreath.velocitywhitelist.command.PluginControlCommand;
 import me.fallenbreath.velocitywhitelist.command.WhitelistCommand;
 import me.fallenbreath.velocitywhitelist.config.Configuration;
-import org.slf4j.Logger;
-
-import java.io.File;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Objects;
 
 @Plugin(
 		id = PluginMeta.ID, name = PluginMeta.NAME, version = PluginMeta.VERSION,
 		url = PluginMeta.REPOSITORY_URL,
 		description = "A simple whitelist plugin for velocity",
-		authors = {"Fallen_Breath"}
+		authors = {"Fallen_Breath", "no7here"}
 )
 public class VelocityWhitelistPlugin
 {
@@ -40,7 +44,7 @@ public class VelocityWhitelistPlugin
 		this.logger = logger;
 		this.dataDirectory = dataDirectory;
 		this.configFilePath = dataDirectory.resolve("config.yml");
-		this.config = new Configuration(this.logger, this.configFilePath);
+		this.config = new Configuration(this.logger, this.configFilePath, () -> server.getConfiguration().isOnlineMode());
 		this.whitelistManager = new WhitelistManager(logger, this.config, this.dataDirectory, this.server);
 	}
 
@@ -58,6 +62,7 @@ public class VelocityWhitelistPlugin
 
 		this.server.getEventManager().register(this, LoginEvent.class, this.whitelistManager::onPlayerLogin);
 		new WhitelistCommand(this.whitelistManager).register(this.server.getCommandManager());
+		new IpBanCommand(this.whitelistManager).register(this.server.getCommandManager());
 		new PluginControlCommand(this.logger, this.config, this.whitelistManager).register(this.server.getCommandManager());
 	}
 
@@ -75,7 +80,8 @@ public class VelocityWhitelistPlugin
 		{
 			try (InputStream in = this.getClass().getClassLoader().getResourceAsStream("config.yml"))
 			{
-				Files.copy(Objects.requireNonNull(in), file.toPath());
+				String defaultConfig = new String(Objects.requireNonNull(in).readAllBytes(), StandardCharsets.UTF_8);
+				Files.writeString(file.toPath(), defaultConfig);
 			}
 			catch (Exception e)
 			{

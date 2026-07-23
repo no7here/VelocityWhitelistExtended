@@ -1,26 +1,29 @@
 package me.fallenbreath.velocitywhitelist.config;
 
-import com.google.common.base.Supplier;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import me.fallenbreath.velocitywhitelist.utils.FileUtils;
-import me.fallenbreath.velocitywhitelist.utils.UuidUtils;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import org.yaml.snakeyaml.Yaml;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-public class PlayerList
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.yaml.snakeyaml.Yaml;
+
+import com.google.common.base.Supplier;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+
+import me.fallenbreath.velocitywhitelist.utils.FileUtils;
+import me.fallenbreath.velocitywhitelist.utils.UuidUtils;
+
+public class PlayerList implements YamlStoredList<PlayerList>
 {
 	private final Set<String> names = Sets.newLinkedHashSet();
 	private final Map<UUID, @Nullable String> uuids = Maps.newLinkedHashMap();
@@ -37,11 +40,13 @@ public class PlayerList
 		this.configEnableGetter = configEnableGetter;
 	}
 
+	@Override
 	public String getName()
 	{
 		return this.name;
 	}
 
+	@Override
 	public Path getFilePath()
 	{
 		return this.filePath;
@@ -57,18 +62,12 @@ public class PlayerList
 
 	public boolean isConfigEnabled()
 	{
-		synchronized (this.lock)
-		{
-			return this.configEnableGetter.get();
-		}
+		return this.configEnableGetter.get();
 	}
 
 	public boolean isActivated()
 	{
-		synchronized (this.lock)
-		{
-			return this.isLoadOk() && this.isConfigEnabled();
-		}
+		return this.isLoadOk() && this.isConfigEnabled();
 	}
 
 	public ImmutableList<String> getPlayerNames()
@@ -119,31 +118,27 @@ public class PlayerList
 		}
 	}
 
-	public static class PlayerUUIDComputeResult<T>
+	/**
+	 * A snapshot of one uuid mapping. {@code exists} is needed alongside the name,
+	 * since a stored uuid may legally map to a null name (bare uuid entry in the yaml file)
+	 */
+	public record UuidEntry(boolean exists, @Nullable String name)
 	{
-		public boolean addNewValue = false;
-		public @Nullable String newValue = null;
-		public T ret = null;
 	}
 
-	@FunctionalInterface
-	public interface PlayerUUIDComputeFunction<T>
-	{
-		PlayerUUIDComputeResult<T> compute(boolean exists, @Nullable String oldName);
-	}
-
-	public <T> T computePlayerUUID(UUID uuid, PlayerUUIDComputeFunction<T> func)
+	public UuidEntry peekPlayerUUID(UUID uuid)
 	{
 		synchronized (this.lock)
 		{
-			boolean exists = this.uuids.containsKey(uuid);
-			String oldName = this.uuids.get(uuid);
-			PlayerUUIDComputeResult<T> result = func.compute(exists, oldName);
-			if (result.addNewValue)
-			{
-				this.uuids.put(uuid, result.newValue);
-			}
-			return result.ret;
+			return new UuidEntry(this.uuids.containsKey(uuid), this.uuids.get(uuid));
+		}
+	}
+
+	public void putPlayerUUID(UUID uuid, @Nullable String playerName)
+	{
+		synchronized (this.lock)
+		{
+			this.uuids.put(uuid, playerName);
 		}
 	}
 
@@ -155,6 +150,7 @@ public class PlayerList
 		}
 	}
 
+	@Override
 	public void resetTo(@NotNull PlayerList newList)
 	{
 		synchronized (this.lock)
@@ -179,12 +175,14 @@ public class PlayerList
 		}
 	}
 
+	@Override
 	public PlayerList createNewEmptyList()
 	{
 		return new PlayerList(this.name, this.filePath, this.configEnableGetter);
 	}
 
-	@SuppressWarnings({"unchecked", "rawtypes"})
+	@Override
+	@SuppressWarnings("unchecked")
 	public void load(Logger logger) throws IOException
 	{
 		Map<String, Object> options = Maps.newHashMap();
@@ -195,53 +193,96 @@ public class PlayerList
 		synchronized (this.lock)
 		{
 			this.names.clear();
-			if (options.get("names") instanceof List list)
+			this.uuids.clear();
+			int skipped = 0;
+
+			// A present but non-list value means the file is structurally corrupt. Fail the whole load
+			// so a reload keeps the previous state, instead of silently replacing the list with an empty one
+			Object namesVal = options != null ? options.get("names") : null;
+			if (namesVal != null)
 			{
-				list.forEach(entry -> this.names.add(entry.toString()));
+				if (!(namesVal instanceof List<?> namesList))
+				{
+					throw new IOException("The 'names' field in the file is malformed (not a YAML list)");
+				}
+				for (Object entry : namesList)
+				{
+					if (entry == null)
+					{
+						logger.warn("Skipping null/empty player name entry");
+						skipped++;
+						continue;
+					}
+					this.names.add(entry.toString());
+				}
 			}
 
-			this.uuids.clear();
-			if (options.get("uuids") instanceof List list)
+			Object uuidsVal = options != null ? options.get("uuids") : null;
+			if (uuidsVal != null)
 			{
-				list.forEach(item -> {
+				if (!(uuidsVal instanceof List<?> uuidsList))
+				{
+					throw new IOException("The 'uuids' field in the file is malformed (not a YAML list)");
+				}
+				for (Object item : uuidsList)
+				{
 					if (item instanceof String s)
 					{
-						UuidUtils.tryParseUuid(s).ifPresentOrElse(
-								uuid -> this.uuids.put(uuid, null),
-								() -> logger.warn("Skipping invalid UUID \"{}\"", s)
-						);
+						Optional<UUID> uuid = UuidUtils.tryParseUuid(s);
+						if (uuid.isPresent())
+						{
+							this.uuids.put(uuid.get(), null);
+						}
+						else
+						{
+							logger.warn("Skipping invalid UUID \"{}\"", s);
+							skipped++;
+						}
 					}
 					else if (item instanceof Map<?, ?> map)
 					{
 						if (map.size() != 1)
 						{
 							logger.warn("Skipping invalid map item with size {}", map.size());
+							skipped++;
+							continue;
+						}
+						Map.Entry<?, ?> entry = map.entrySet().iterator().next();
+						if (entry.getKey() instanceof String s && (entry.getValue() instanceof String || entry.getValue() == null))
+						{
+							String name = (String)entry.getValue();
+							Optional<UUID> uuid = UuidUtils.tryParseUuid(s);
+							if (uuid.isPresent())
+							{
+								this.uuids.put(uuid.get(), name);
+							}
+							else
+							{
+								logger.warn("Skipping invalid UUID \"{}\" ({})", s, name);
+								skipped++;
+							}
 						}
 						else
 						{
-							Map.Entry<?, ?> entry = map.entrySet().iterator().next();
-							if (entry.getKey() instanceof String s && (entry.getValue() instanceof String || entry.getValue() == null))
-							{
-								String name = (String)entry.getValue();
-								UuidUtils.tryParseUuid(s).ifPresentOrElse(
-										uuid -> this.uuids.put(uuid, name),
-										() -> logger.warn("Skipping invalid UUID \"{}\" ({})", s, name)
-								);
-							}
+							logger.warn("Skipping invalid UUID list item {}", item);
+							skipped++;
 						}
 					}
 					else
 					{
 						logger.warn("Skipping invalid UUID list item {}", item);
+						skipped++;
 					}
-				});
+				}
 			}
 
 			this.loadOk = true;
+			YamlStoredList.logSkippedEntries(logger, this.name, skipped);
 			logger.info("{} loaded with {} names and {} uuids", this.name, this.names.size(), this.uuids.size());
 		}
 	}
 
+	@Override
 	public void save() throws IOException
 	{
 		Map<String, Object> options = Maps.newLinkedHashMap();

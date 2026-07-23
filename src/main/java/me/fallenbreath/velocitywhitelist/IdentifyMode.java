@@ -5,5 +5,5 @@ public enum IdentifyMode
 	NAME,
 	UUID;
 
-	public static final IdentifyMode DEFAULT = NAME;
+	public static final IdentifyMode DEFAULT = UUID;
 }

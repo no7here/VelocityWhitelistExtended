@@ -1,8 +1,13 @@
 package me.fallenbreath.velocitywhitelist.command;
 
+import static me.fallenbreath.velocitywhitelist.command.CommandUtils.literal;
+
+import org.slf4j.Logger;
+
 import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandSource;
+
 import me.fallenbreath.velocitywhitelist.PluginMeta;
 import me.fallenbreath.velocitywhitelist.WhitelistManager;
 import me.fallenbreath.velocitywhitelist.config.Configuration;
@@ -10,9 +15,6 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
-import org.slf4j.Logger;
-
-import static me.fallenbreath.velocitywhitelist.command.CommandUtils.literal;
 
 public class PluginControlCommand
 {
@@ -44,9 +46,18 @@ public class PluginControlCommand
 		try
 		{
 			this.config.reload();
-			this.manager.loadLists();
-			source.sendMessage(Component.text("Reloaded config, whitelist and blacklist"));
-			return 1;
+			boolean loaded = this.manager.loadLists();
+			this.manager.kickIpBannedPlayers();
+			if (loaded)
+			{
+				source.sendMessage(Component.text("Reloaded config, whitelist, blacklist and IP ban list"));
+				return 1;
+			}
+			else
+			{
+				source.sendMessage(Component.text("Failed to reload some or all files, see console for details"));
+				return 0;
+			}
 		}
 		catch (Exception e)
 		{
@@ -65,6 +76,9 @@ public class PluginControlCommand
 		WhitelistCommand.showListStatus(source, this.manager.getWhitelist(), "  ");
 		source.sendMessage(Component.text("Blacklist:"));
 		WhitelistCommand.showListStatus(source, this.manager.getBlacklist(), "  ");
+		source.sendMessage(Component.text("IP Ban List:"));
+		source.sendMessage(Component.text(String.format("  Activated: %s (config enabled: %s, load ok: %s)", this.manager.getIpBanList().isActivated(), this.manager.getIpBanList().isConfigEnabled(), this.manager.getIpBanList().isLoadOk())));
+		source.sendMessage(Component.text(String.format("  Size: %d IP addresses", this.manager.getIpBanList().getIps().size())));
 		return 0;
 	}
 }

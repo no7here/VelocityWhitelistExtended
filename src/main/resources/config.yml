@@ -1,18 +1,25 @@
-# Config file version. Do not edit it
-_version: 1
+# Config file version. Do not edit it.
+version: 2
 
-# The way to identify a player
-# Options: name, uuid. Default: name
-# For online servers, it's suggested to use the uuid mode 
-# since it can keep tracking on the mojang account of the player
-identify_mode: name
+# Control how players are identified
+# Options: name, uuid. Default: uuid
+# For online servers, it's recommended to use UUID as it tracks the permanent ID of the player's Mojang account, rather than the changeable username
+identify_mode: uuid
 
-# If the whitelist functionality is enabled
+# Control if the whitelist is enabled
 whitelist_enabled: true
-# Message sent to those not whitelisted players
+# Message sent to players who aren't whitelisted
 whitelist_kick_message: You are not in the whitelist!
 
-# If the blacklist functionality is enabled
+# Control if the blacklist is enabled (takes priority over whitelist if both are enabled)
 blacklist_enabled: true
-# Message sent to those blacklisted players
+# Message sent to players who are blacklisted
 blacklist_kick_message: You are banned from the server!
+
+# Control if IP bans are enabled
+ipban_enabled: true
+# Message sent to players who join on a banned IP address
+ipban_kick_message: Your IP address is banned from the server!
+# Controls whether players should be automatically blacklisted when they try to join from a banned IP
+# REQUIRES: identify_mode to be set to uuid & proxy to be in online mode, else it will be ignored.
+blacklist_on_ipban_join: false

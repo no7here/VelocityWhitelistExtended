@@ -1,13 +1,13 @@
 package me.fallenbreath.velocitywhitelist.command;
 
+import java.util.concurrent.CompletableFuture;
+
 import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import com.velocitypowered.api.command.CommandSource;
-
-import java.util.concurrent.CompletableFuture;
 
 public class CommandUtils
 {

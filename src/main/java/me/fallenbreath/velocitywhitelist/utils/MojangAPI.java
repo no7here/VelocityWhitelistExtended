@@ -1,12 +1,5 @@
 package me.fallenbreath.velocitywhitelist.utils;
 
-import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
-import com.google.gson.Gson;
-import com.velocitypowered.api.proxy.ProxyServer;
-import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -20,6 +13,14 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+
+import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.gson.Gson;
+import com.velocitypowered.api.proxy.ProxyServer;
 
 public class MojangAPI
 {
