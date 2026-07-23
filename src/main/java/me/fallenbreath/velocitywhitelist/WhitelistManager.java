@@ -215,7 +215,11 @@ public class WhitelistManager
 					source.sendPlainMessage("WARN: Trying to use UUID in NAME mode. Nothing will happen");
 					yield false;
 				}
-				yield handleNameMode.handle(profile.map(GameProfile::getId).orElse(null), value);
+				// Prefer the resolved profile's name (from the online player or the Mojang API lookup
+				// above) over the raw command argument: it's the canonical case-preserved name that
+				// checkPlayerName will actually be compared against at login, so storing the admin's
+				// possibly differently-cased input here would silently break the whitelist/blacklist match.
+				yield handleNameMode.handle(profile.map(GameProfile::getId).orElse(null), profile.map(GameProfile::getName).orElse(value));
 			}
 
 			case UUID -> {
