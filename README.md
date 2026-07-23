@@ -126,3 +126,23 @@ Requires the permission `velocitywhitelist.command`.
 **Plugin Control:** 
 - `/velocitywhitelist` - Show plugin information.
 - `/velocitywhitelist reload` - Reload config, whitelist, blacklist & IP ban files.
+
+***
+#### ✨ Planned Updates
+Updates that are planned for the (hopefully) near future. 
+***
+- Features & QoL Additions
+    - [x] IP banning
+    - [ ] Temporary bans
+    - [ ] Per-player kick messages
+    - [ ] CIDR / Subnet banning
+    - [ ] Admin bypass & immunity permissions 
+    - [ ] Last known IP tracking (for offline IP bans)
+    - [ ] Vanilla `whitelist.json` importer 
+    - [ ] Clickable commands (via Adventure API)
+- Performance & Architectural Improvements
+    - [ ] Asynchronous file saves 
+    - [ ] Lock-free reads
+    - [ ] Configuration refactor 
+    - [ ] Brigadier command extraction
+
