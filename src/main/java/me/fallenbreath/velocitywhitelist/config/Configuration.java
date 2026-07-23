@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -14,13 +13,10 @@ import com.google.common.base.Supplier;
 import com.google.common.collect.Maps;
 
 import me.fallenbreath.velocitywhitelist.IdentifyMode;
-import me.fallenbreath.velocitywhitelist.PluginMeta;
 import me.fallenbreath.velocitywhitelist.utils.FileUtils;
 
 public class Configuration
 {
-	private static final int CONFIG_VERSION = 2;
-
 	/**
 	 * Bundles every field derived from a single load/reload, so it can be published as one unit
 	 */
@@ -43,13 +39,15 @@ public class Configuration
 	private volatile Snapshot snapshot = Snapshot.EMPTY;
 	private final Logger logger;
 	private final Path configFilePath;
-	private final Supplier<Boolean> proxyOnlineModeGetter;
+	private final ConfigMigrator migrator;
+	private final ConfigWarnings warnings;
 
 	public Configuration(Logger logger, Path configFilePath, Supplier<Boolean> proxyOnlineModeGetter)
 	{
 		this.logger = logger;
 		this.configFilePath = configFilePath;
-		this.proxyOnlineModeGetter = proxyOnlineModeGetter;
+		this.migrator = new ConfigMigrator(logger, configFilePath);
+		this.warnings = new ConfigWarnings(logger, proxyOnlineModeGetter);
 	}
 
 	@SuppressWarnings("unchecked")
@@ -64,161 +62,19 @@ public class Configuration
 		{
 			stagedOptions.putAll(loadedOptions);
 		}
-		stagedOptions = this.migrate(stagedOptions);
+		stagedOptions = this.migrator.migrate(stagedOptions);
 		stagedOptions = Collections.unmodifiableMap(stagedOptions);
 
-		this.snapshot = new Snapshot(stagedOptions, makeIdentifyMode(stagedOptions, this.logger));
-		this.warnAboutRiskyOptions();
-		this.warnAboutInvalidBooleanOptions();
+		IdentifyMode identifyMode = makeIdentifyMode(stagedOptions, this.logger);
+		this.snapshot = new Snapshot(stagedOptions, identifyMode);
+		this.warnings.warnAboutRiskyOptions(stagedOptions, identifyMode);
+		this.warnings.warnAboutInvalidBooleanOptions(stagedOptions);
 	}
 
 	public void reload() throws IOException
 	{
 		String content = Files.readString(this.configFilePath);
 		this.load(content);
-	}
-
-	/**
-	 * Returns the value of the given option in the given map, or the given default if the option is absent
-	 */
-	private static Object option(Map<String, Object> options, String key, Object defaultValue)
-	{
-		Object value = options.get(key);
-		return value != null ? value : defaultValue;
-	}
-
-	/**
-	 * Parses a config version value that should be a YAML Number, but also accepts a hand-quoted
-	 * numeric string (e.g. `version: "2"`) so an already-current config doesn't get misdetected as
-	 * legacy and needlessly re-migrated (including rewriting the file) on every load
-	 */
-	private static int parseVersion(Object versionObj)
-	{
-		if (versionObj instanceof Number number)
-		{
-			return number.intValue();
-		}
-		if (versionObj instanceof String s && s.matches("\\d+"))
-		{
-			try
-			{
-				return Integer.parseInt(s);
-			}
-			catch (NumberFormatException e)
-			{
-				// A digit-only string too large to fit in an int is necessarily >= CONFIG_VERSION,
-				// so treat it the same as any other already-current version rather than letting the
-				// whole config load fail over an oversized (if nonsensical) version number
-				return Integer.MAX_VALUE;
-			}
-		}
-		return 0;
-	}
-
-	/**
-	 * Migrates the given staging options to the current config version, returning the map to publish
-	 */
-	private Map<String, Object> migrate(Map<String, Object> options)
-	{
-		Object versionObj = options.get("_version");  // key used by config v1
-		if (versionObj == null)
-		{
-			versionObj = options.get("version");
-		}
-		int version = parseVersion(versionObj);
-		if (version >= CONFIG_VERSION)
-		{
-			return options;
-		}
-
-		this.logger.warn("Migrating config file from {} to v{}", version == 0 ? "a legacy version" : "v" + version, CONFIG_VERSION);
-		this.logger.warn("Please read the documentation for more information: {}", PluginMeta.REPOSITORY_URL);
-
-		// Configs from before the uuid default switch behaved as name mode when identify_mode was absent,
-		// so "name" must stay the fallback here, or migration would silently stop name-based lists from matching.
-		// uuid is the default for newly generated configs only.
-		Map<String, Object> newOptions = Maps.newLinkedHashMap();
-		newOptions.put("version", CONFIG_VERSION);
-		newOptions.put("identify_mode", option(options, "identify_mode", "name"));
-		newOptions.put("whitelist_enabled", option(options, "whitelist_enabled", option(options, "enabled", true)));
-		newOptions.put("whitelist_kick_message", option(options, "whitelist_kick_message", option(options, "kick_message", "You are not in the whitelist!")));
-		newOptions.put("blacklist_enabled", option(options, "blacklist_enabled", option(options, "enabled", true)));
-		newOptions.put("blacklist_kick_message", option(options, "blacklist_kick_message", "You are banned from the server!"));
-		newOptions.put("ipban_enabled", option(options, "ipban_enabled", true));
-		newOptions.put("ipban_kick_message", option(options, "ipban_kick_message", "Your IP address is banned from the server!"));
-		newOptions.put("blacklist_on_ipban_join", option(options, "blacklist_on_ipban_join", false));
-
-		try
-		{
-			FileUtils.dumpYaml(this.configFilePath, newOptions);
-		}
-		catch (IOException e)
-		{
-			this.logger.warn("Could not save the migrated configuration file", e);
-		}
-		return newOptions;
-	}
-
-	/**
-	 * blacklist_on_ipban_join lets an unauthenticated network peer (anyone joining from a banned IP)
-	 * trigger a blacklist write, so it's only safe when player identities are actually verified: uuid
-	 * identify_mode, on a proxy that's genuinely running in online mode. Both are hard-required - checked
-	 * here rather than trusted from config - so a bad config can't silently reopen the risk.
-	 */
-	private boolean meetsBlacklistOnIpBanJoinRequirements(IdentifyMode identifyMode)
-	{
-		return identifyMode == IdentifyMode.UUID && this.isProxyOnlineMode();
-	}
-
-	private static boolean isBlacklistOnIpBanJoinConfigured(Map<String, Object> options)
-	{
-		Object opt = options.get("blacklist_on_ipban_join");
-		return opt instanceof Boolean && (Boolean)opt;
-	}
-
-	private void warnAboutRiskyOptions()
-	{
-		Snapshot snapshot = this.snapshot;
-		if (!isBlacklistOnIpBanJoinConfigured(snapshot.options) || this.meetsBlacklistOnIpBanJoinRequirements(snapshot.identifyMode))
-		{
-			return;
-		}
-
-		this.logger.warn("blacklist_on_ipban_join is enabled in the config, but its requirements are not met, so it has been forced off:");
-		if (snapshot.identifyMode != IdentifyMode.UUID)
-		{
-			this.logger.warn("- identify_mode must be uuid (currently: {})", snapshot.identifyMode.name().toLowerCase(Locale.ROOT));
-		}
-		if (!this.isProxyOnlineMode())
-		{
-			this.logger.warn("- the proxy must be running in online mode");
-		}
-		this.logger.warn("Unverified identities would let anyone joining from a banned IP get an arbitrary name/account blacklisted. See the config comments / README for more information: {}", PluginMeta.REPOSITORY_URL);
-	}
-
-	private boolean isProxyOnlineMode()
-	{
-		return this.proxyOnlineModeGetter.get();
-	}
-
-	/**
-	 * Warns once per load/reload about any boolean option that's present but not actually a
-	 * Boolean (e.g. a hand-quoted "true" string parses as a String under SnakeYAML). This must run
-	 * here rather than from the getters themselves: isWhitelistEnabled/isBlacklistEnabled/
-	 * isIpBanEnabled are read on every single login via each list's isActivated(), so a warning in
-	 * the getter would repeat on every connection instead of once per config load
-	 */
-	private void warnAboutInvalidBooleanOptions()
-	{
-		Map<String, Object> options = this.snapshot.options;
-		for (String key : List.of("whitelist_enabled", "blacklist_enabled", "ipban_enabled", "blacklist_on_ipban_join"))
-		{
-			Object value = options.get(key);
-			if (value != null && !(value instanceof Boolean))
-			{
-				this.logger.warn("Invalid value for {}: {} (expected true/false), treating as disabled", key, value);
-			}
-		}
 	}
 
 	private static IdentifyMode makeIdentifyMode(Map<String, Object> options, Logger logger)
@@ -255,9 +111,9 @@ public class Configuration
 
 	/**
 	 * Reads a boolean config option, defaulting to false (disabled) if it's absent or not actually
-	 * a Boolean. Invalid values are warned about once per load in warnAboutInvalidBooleanOptions(),
-	 * not here: this getter is called on every single login (via each list's isActivated()), so it
-	 * must stay a pure read with no logging side effect
+	 * a Boolean. Invalid values are warned about once per load in ConfigWarnings, not here: this
+	 * getter is called on every single login (via each list's isActivated()), so it must stay a
+	 * pure read with no logging side effect
 	 */
 	private boolean getBooleanOption(String key)
 	{
@@ -268,7 +124,7 @@ public class Configuration
 	public boolean isBlacklistOnIpBanJoin()
 	{
 		Snapshot snapshot = this.snapshot;
-		return isBlacklistOnIpBanJoinConfigured(snapshot.options) && this.meetsBlacklistOnIpBanJoinRequirements(snapshot.identifyMode);
+		return ConfigWarnings.isBlacklistOnIpBanJoinConfigured(snapshot.options) && this.warnings.meetsBlacklistOnIpBanJoinRequirements(snapshot.identifyMode);
 	}
 
 	public IdentifyMode getIdentifyMode()
