@@ -105,7 +105,14 @@ public class PlayerList implements YamlStoredList<PlayerList>
 	{
 		synchronized (this.lock)
 		{
-			return ImmutableList.copyOf(this.uuids.entrySet());
+			// Snapshot each entry's value rather than copying the live Map.Entry objects: a repeat
+			// putPlayerUUID() for the same key mutates the existing HashMap node's value in place, so
+			// a plain ImmutableList.copyOf(entrySet()) would still let a previously-returned entry's
+			// value change after the fact. Maps.immutableEntry (unlike Map.entry()) tolerates a null
+			// value, which a bare-uuid entry legitimately has.
+			return this.uuids.entrySet().stream()
+					.map(e -> Maps.<UUID, String>immutableEntry(e.getKey(), e.getValue()))
+					.collect(ImmutableList.toImmutableList());
 		}
 	}
 
