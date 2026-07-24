@@ -163,7 +163,7 @@ public class MojangAPI
 		}
 		catch (ReflectiveOperationException | RuntimeException ignored)
 		{
-			// Best-effort optimisation only as setAccessible can throw InaccessibleObjectException under strong module encapsulation and any failure here just falls back to a plain client
+		    // Optional optimisation only, so any failure here just falls back to a plain client
 		}
 		return HttpClient.newBuilder().build();
 	}

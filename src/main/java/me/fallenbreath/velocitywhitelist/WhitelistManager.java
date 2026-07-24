@@ -198,6 +198,7 @@ public class WhitelistManager
 		{
 			uuid = profile.map(GameProfile::getId);
 		}
+		// Also needed in NAME mode to resolve a canonical-case name for offline targets
 		if (uuid.isEmpty() && profile.isEmpty())
 		{
 			if (this.server.getConfiguration().isOnlineMode())
@@ -214,10 +215,12 @@ public class WhitelistManager
 		}
 		if (uuid.isEmpty())
 		{
+		    // Profile may have just been resolved above
 			uuid = profile.map(GameProfile::getId);
 		}
 		if (profile.isEmpty())
 		{
+		    // Resolves the profile if the uuid belongs to a player who is already online
 			profile = uuid.flatMap(this.server::getPlayer).map(Player::getGameProfile);
 		}
 
@@ -229,7 +232,7 @@ public class WhitelistManager
 					source.sendPlainMessage("WARN: Trying to use UUID in NAME mode. Nothing will happen");
 					yield false;
 				}
-				// Prefer the resolved profile name over raw command argument for canonical casing so storing the admin's possibly differently cased input here avoids silently breaking matches
+				// Uses the resolved name rather than raw input since checkPlayerName compares it at login
 				yield handleNameMode.handle(profile.map(GameProfile::getId).orElse(null), profile.map(GameProfile::getName).orElse(value));
 			}
 
@@ -274,6 +277,7 @@ public class WhitelistManager
 						if (added && !this.saveOrRollback(list, () -> list.removePlayerName(playerName), () ->
 								source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())))))
 						{
+						    // Skips the blacklist kick since the change was not saved
 							return false;
 						}
 					}
@@ -310,6 +314,7 @@ public class WhitelistManager
 							if (!this.saveOrRollback(list, () -> this.rollbackUuidEntry(list, uuid, oldEntry), () ->
 									source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())))))
 							{
+							    // Skips the blacklist kick since the change was not saved
 								return false;
 							}
 						}
@@ -419,6 +424,7 @@ public class WhitelistManager
 		for (Player player : this.server.getAllPlayers())
 		{
 			InetSocketAddress address = player.getRemoteAddress();
+			// getAddress() returns null for unresolved socket addresses
 			if (address != null && address.getAddress() != null)
 			{
 				String ipString = address.getAddress().getHostAddress();
@@ -479,6 +485,7 @@ public class WhitelistManager
 		GameProfile profile = player.getGameProfile();
 		InetSocketAddress remoteAddress = player.getRemoteAddress();
 
+		// getAddress() returns null for unresolved socket addresses
 		if (this.ipBanList.isActivated() && remoteAddress != null && remoteAddress.getAddress() != null)
 		{
 			String ipString = remoteAddress.getAddress().getHostAddress();
@@ -525,6 +532,7 @@ public class WhitelistManager
 			{
 				return;
 			}
+			// Quota is only consumed when a write is actually needed
 			if (!this.tryAcquireAutoBlacklistQuota())
 			{
 				return;
@@ -592,6 +600,7 @@ public class WhitelistManager
 				destList.resetTo(newList);
 				return true;
 			}
+			// The YAML library can throw its own exception types on a bad file
 			catch (Exception e)
 			{
 				String msg = String.format("Failed to load the %s, the plugin might not work correctly!", newList.getName());
