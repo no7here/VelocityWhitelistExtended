@@ -22,6 +22,7 @@ import com.google.common.collect.Sets;
 import me.fallenbreath.velocitywhitelist.utils.FileUtils;
 import me.fallenbreath.velocitywhitelist.utils.UuidUtils;
 
+// Represents a list of players stored in a Yaml file
 public class PlayerList implements YamlStoredList<PlayerList>
 {
 	private final Set<String> names = Sets.newLinkedHashSet();
@@ -32,6 +33,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 	private boolean loadOk = false;
 	private final Object lock = new Object();
 
+	// Constructs a new PlayerList instance
 	public PlayerList(String name, Path filePath, Supplier<Boolean> configEnableGetter)
 	{
 		this.name = name;
@@ -39,18 +41,21 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		this.configEnableGetter = configEnableGetter;
 	}
 
+	// Gets the name of this list
 	@Override
 	public String getName()
 	{
 		return this.name;
 	}
 
+	// Gets the file path of this list
 	@Override
 	public Path getFilePath()
 	{
 		return this.filePath;
 	}
 
+	// Checks if the list was loaded successfully
 	public boolean isLoadOk()
 	{
 		synchronized (this.lock)
@@ -59,16 +64,19 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
+	// Checks if the configuration is enabled for this list
 	public boolean isConfigEnabled()
 	{
 		return this.configEnableGetter.get();
 	}
 
+	// Checks if the list is activated
 	public boolean isActivated()
 	{
 		return this.isLoadOk() && this.isConfigEnabled();
 	}
 
+	// Gets an immutable list of all player names
 	public ImmutableList<String> getPlayerNames()
 	{
 		synchronized (this.lock)
@@ -77,6 +85,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
+	// Checks if a player name exists in the list
 	public boolean checkPlayerName(String name)
 	{
 		synchronized (this.lock)
@@ -85,6 +94,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
+	// Adds a player name to the list
 	public boolean addPlayerName(String name)
 	{
 		synchronized (this.lock)
@@ -93,6 +103,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
+	// Removes a player name from the list
 	public boolean removePlayerName(String name)
 	{
 		synchronized (this.lock)
@@ -101,21 +112,19 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
+	// Gets an immutable list of player UUID mapping entries
 	public ImmutableList<Map.Entry<UUID, @Nullable String>> getPlayerUuidMappingEntries()
 	{
 		synchronized (this.lock)
 		{
-			// Snapshot each entry's value rather than copying the live Map.Entry objects: a repeat
-			// putPlayerUUID() for the same key mutates the existing HashMap node's value in place, so
-			// a plain ImmutableList.copyOf(entrySet()) would still let a previously-returned entry's
-			// value change after the fact. Maps.immutableEntry (unlike Map.entry()) tolerates a null
-			// value, which a bare-uuid entry legitimately has.
+			// Snapshot each entry's value rather than copying the live Map.Entry objects as a repeat putPlayerUUID() for the same key mutates the existing HashMap node's value in place so a plain ImmutableList.copyOf(entrySet()) would still let a previously-returned entry's value change after the fact, Maps.immutableEntry tolerates a null value which a bare-uuid entry legitimately has
 			return this.uuids.entrySet().stream()
 					.map(e -> Maps.<UUID, String>immutableEntry(e.getKey(), e.getValue()))
 					.collect(ImmutableList.toImmutableList());
 		}
 	}
 
+	// Checks if a player UUID exists in the list
 	public boolean checkPlayerUUID(UUID uuid)
 	{
 		synchronized (this.lock)
@@ -124,14 +133,12 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
-	/**
-	 * A snapshot of one uuid mapping. {@code exists} is needed alongside the name,
-	 * since a stored uuid may legally map to a null name (bare uuid entry in the yaml file)
-	 */
+	// A snapshot of one uuid mapping where exists is needed alongside the name since a stored uuid may legally map to a null name
 	public record UuidEntry(boolean exists, @Nullable String name)
 	{
 	}
 
+	// Peeks at a player UUID to get its mapping entry
 	public UuidEntry peekPlayerUUID(UUID uuid)
 	{
 		synchronized (this.lock)
@@ -140,6 +147,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
+	// Adds or updates a player UUID and their associated name in the list
 	public void putPlayerUUID(UUID uuid, @Nullable String playerName)
 	{
 		synchronized (this.lock)
@@ -148,6 +156,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
+	// Removes a player UUID from the list
 	public @Nullable String removePlayerUUID(UUID uuid)
 	{
 		synchronized (this.lock)
@@ -156,6 +165,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
+	// Resets the current list state to match a new list
 	@Override
 	public void resetTo(@NotNull PlayerList newList)
 	{
@@ -181,22 +191,21 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
+	// Creates a new empty player list with the same configuration
 	@Override
 	public PlayerList createNewEmptyList()
 	{
 		return new PlayerList(this.name, this.filePath, this.configEnableGetter);
 	}
 
+	// Loads the player list from its Yaml file
 	@Override
 	@SuppressWarnings("unchecked")
 	public void load(Logger logger) throws IOException
 	{
 		String yamlContent = Files.readString(this.filePath);
 
-		// Plain load() + cast rather than loadAs(..., HashMap.class): loadAs asks SafeConstructor to
-		// construct the root via an explicit "!!java.util.HashMap" tag, which isn't on its safe
-		// allowlist (only implicit/core YAML tags like a plain mapping are) and throws. An empty file
-		// parses to null, same as Configuration's config.yml handling.
+		// Load as a map instead of using loadAs with HashMap class because loadAs asks SafeConstructor to construct the root via an explicit tag which is not on its safe allowlist and throws, an empty file parses to null the same as Configuration's config.yml handling
 		Map<String, Object> options = (Map<String, Object>)FileUtils.newSafeYaml().load(yamlContent);
 
 		synchronized (this.lock)
@@ -205,8 +214,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 			this.uuids.clear();
 			int skipped = 0;
 
-			// A present but non-list value means the file is structurally corrupt. Fail the whole load
-			// so a reload keeps the previous state, instead of silently replacing the list with an empty one
+			// Extract the names value if options is not null, a present but non-list value means the file is structurally corrupt so fail the whole load so a reload keeps the previous state instead of silently replacing the list with an empty one
 			Object namesVal = options != null ? options.get("names") : null;
 			if (namesVal != null)
 			{
@@ -291,6 +299,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
+	// Saves the player list to its Yaml file
 	@Override
 	public void save() throws IOException
 	{

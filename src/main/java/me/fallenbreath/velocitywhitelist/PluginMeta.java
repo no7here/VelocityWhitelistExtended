@@ -1,5 +1,6 @@
 package me.fallenbreath.velocitywhitelist;
 
+// Contains static metadata for the plugin
 public class PluginMeta
 {
 	public static final String ID = "velocitywhitelist";

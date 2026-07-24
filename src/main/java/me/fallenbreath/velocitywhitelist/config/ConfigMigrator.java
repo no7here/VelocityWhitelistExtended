@@ -11,11 +11,7 @@ import com.google.common.collect.Maps;
 import me.fallenbreath.velocitywhitelist.PluginMeta;
 import me.fallenbreath.velocitywhitelist.utils.FileUtils;
 
-/**
- * Detects a loaded config's version and migrates it - in memory, and rewritten to disk - to
- * CONFIG_VERSION, filling in newly-introduced options with the values that preserve pre-migration
- * behaviour
- */
+// Detects a loaded config's version and migrates it in memory and rewritten to disk to CONFIG_VERSION, filling in newly-introduced options with the values that preserve pre-migration behaviour
 final class ConfigMigrator
 {
 	static final int CONFIG_VERSION = 2;
@@ -29,20 +25,14 @@ final class ConfigMigrator
 		this.configFilePath = configFilePath;
 	}
 
-	/**
-	 * Returns the value of the given option in the given map, or the given default if the option is absent
-	 */
+	// Returns the value of the given option in the given map or the given default if the option is absent
 	private static Object option(Map<String, Object> options, String key, Object defaultValue)
 	{
 		Object value = options.get(key);
 		return value != null ? value : defaultValue;
 	}
 
-	/**
-	 * Parses a config version value that should be a YAML Number, but also accepts a hand-quoted
-	 * numeric string (e.g. `version: "2"`) so an already-current config doesn't get misdetected as
-	 * legacy and needlessly re-migrated (including rewriting the file) on every load
-	 */
+	// Parses a config version value that should be a YAML Number but also accepts a hand-quoted numeric string so an already-current config doesn't get misdetected as legacy and needlessly re-migrated on every load
 	private static int parseVersion(Object versionObj)
 	{
 		if (versionObj instanceof Number number)
@@ -57,21 +47,18 @@ final class ConfigMigrator
 			}
 			catch (NumberFormatException e)
 			{
-				// A digit-only string too large to fit in an int is necessarily >= CONFIG_VERSION,
-				// so treat it the same as any other already-current version rather than letting the
-				// whole config load fail over an oversized (if nonsensical) version number
+				// A digit-only string too large to fit in an int is necessarily >= CONFIG_VERSION so treat it the same as any other already-current version rather than letting the whole config load fail over an oversized version number
 				return Integer.MAX_VALUE;
 			}
 		}
 		return 0;
 	}
 
-	/**
-	 * Migrates the given staging options to the current config version, returning the map to publish
-	 */
+	// Migrates the given staging options to the current config version and returns the map to publish
 	Map<String, Object> migrate(Map<String, Object> options)
 	{
-		Object versionObj = options.get("_version");  // key used by config v1
+		// Key used by config v1
+		Object versionObj = options.get("_version");
 		if (versionObj == null)
 		{
 			versionObj = options.get("version");
@@ -85,9 +72,8 @@ final class ConfigMigrator
 		this.logger.warn("Migrating config file from {} to v{}", version == 0 ? "a legacy version" : "v" + version, CONFIG_VERSION);
 		this.logger.warn("Please read the documentation for more information: {}", PluginMeta.REPOSITORY_URL);
 
-		// Configs from before the uuid default switch behaved as name mode when identify_mode was absent,
-		// so "name" must stay the fallback here, or migration would silently stop name-based lists from matching.
-		// uuid is the default for newly generated configs only.
+		// Configs from before the uuid default switch behaved as name mode when identify_mode was absent so "name" must stay the fallback here or migration would silently stop name-based lists from matching
+		// UUID is the default for newly generated configs only
 		Map<String, Object> newOptions = Maps.newLinkedHashMap();
 		newOptions.put("version", CONFIG_VERSION);
 		newOptions.put("identify_mode", option(options, "identify_mode", "name"));

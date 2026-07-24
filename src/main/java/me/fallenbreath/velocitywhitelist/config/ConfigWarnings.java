@@ -11,10 +11,7 @@ import com.google.common.base.Supplier;
 import me.fallenbreath.velocitywhitelist.IdentifyMode;
 import me.fallenbreath.velocitywhitelist.PluginMeta;
 
-/**
- * Validates a freshly-loaded config's options and logs warnings for anything suspicious, once per
- * load/reload (never from a hot-path getter - see the callers in Configuration for why)
- */
+// Validates a freshly-loaded config's options and logs warnings for anything suspicious once per load/reload
 final class ConfigWarnings
 {
 	private final Logger logger;
@@ -26,12 +23,8 @@ final class ConfigWarnings
 		this.proxyOnlineModeGetter = proxyOnlineModeGetter;
 	}
 
-	/**
-	 * blacklist_on_ipban_join lets an unauthenticated network peer (anyone joining from a banned IP)
-	 * trigger a blacklist write, so it's only safe when player identities are actually verified: uuid
-	 * identify_mode, on a proxy that's genuinely running in online mode. Both are hard-required - checked
-	 * here rather than trusted from config - so a bad config can't silently reopen the risk.
-	 */
+	// blacklist_on_ipban_join lets an unauthenticated network peer trigger a blacklist write so it's only safe when player identities are actually verified: UUID identify_mode on a proxy that's genuinely running in online mode
+	// Both are hard-required and checked here rather than trusted from config so a bad config can't silently reopen the risk
 	boolean meetsBlacklistOnIpBanJoinRequirements(IdentifyMode identifyMode)
 	{
 		return identifyMode == IdentifyMode.UUID && this.isProxyOnlineMode();
@@ -67,14 +60,8 @@ final class ConfigWarnings
 		return this.proxyOnlineModeGetter.get();
 	}
 
-	/**
-	 * Warns once per load/reload about any boolean option that's present but not actually a
-	 * Boolean (e.g. a hand-quoted "true" string parses as a String under SnakeYAML). This must be
-	 * called once from load()/reload() rather than from the getters themselves:
-	 * isWhitelistEnabled/isBlacklistEnabled/isIpBanEnabled all delegate to a getter that's read on
-	 * every single login via each list's isActivated(), so a warning in the getter would repeat on
-	 * every connection instead of once per config load
-	 */
+	// Warns once per load/reload about any boolean option that's present but not actually a Boolean
+	// This must be called once from load()/reload() rather than from the getters themselves so a warning doesn't repeat on every connection
 	void warnAboutInvalidBooleanOptions(Map<String, Object> options)
 	{
 		for (String key : List.of("whitelist_enabled", "blacklist_enabled", "ipban_enabled", "blacklist_on_ipban_join"))

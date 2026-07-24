@@ -18,12 +18,14 @@ import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 
+// Command for controlling the plugin
 public class PluginControlCommand
 {
 	private final Logger logger;
 	private final Configuration config;
 	private final WhitelistManager manager;
 
+	// Creates a new plugin control command
 	public PluginControlCommand(Logger logger, Configuration config, WhitelistManager whitelistManager)
 	{
 		this.logger = logger;
@@ -31,6 +33,7 @@ public class PluginControlCommand
 		this.manager = whitelistManager;
 	}
 
+	// Registers the command with the command manager
 	@SuppressWarnings("deprecation")  // Next time for sure...
 	public void register(CommandManager commandManager)
 	{
@@ -43,6 +46,7 @@ public class PluginControlCommand
 		commandManager.register(new BrigadierCommand(root.build()));
 	}
 
+	// Reloads the configuration and lists
 	private int reloadAll(CommandSource source)
 	{
 		try
@@ -69,6 +73,7 @@ public class PluginControlCommand
 		return 0;
 	}
 
+	// Shows plugin information to the source
 	private int showPluginInfo(CommandSource source)
 	{
 		source.sendMessage(Component.text(String.format("%s v%s", PluginMeta.NAME, PluginMeta.VERSION)));

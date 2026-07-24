@@ -19,36 +19,35 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+// Tests for the configuration class
 @ExtendWith(MockitoExtension.class)
 class ConfigurationTest
 {
+
 	@Mock
 	Logger logger;
 
+	// Ensure that a non-boolean value for whitelist_enabled warns instead of failing silently
 	@Test
 	void whitelistEnabled_withNonBooleanValue_shouldWarnInsteadOfFailingSilently(@TempDir Path tempDir)
 	{
 		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
 
-		// A hand-edited config quoting the boolean (`whitelist_enabled: "true"`) parses as a
-		// String under SnakeYAML, not a Boolean. isWhitelistEnabled() must not swallow this with
-		// zero log output and silently turn off the whitelist with no diagnostic at all - it
-		// should warn, same as the identify_mode handling a few lines away in the same class.
+		// Configs with quoted with booleans parse as strings under SnakeYAML. This prevents it being swallowed with no log output & a silently disabled list.
 		config.load("version: 2\nwhitelist_enabled: \"true\"\nblacklist_enabled: true\nipban_enabled: true\n");
+
 		config.isWhitelistEnabled();
 
 		verify(logger, atLeastOnce()).warn(anyString(), any(), any());
 	}
 
+	// Ensure that a warning is only logged once on load and not on every getter call
 	@Test
 	void whitelistEnabled_withNonBooleanValue_warnsOnceOnLoad_notOnEveryGetterCall(@TempDir Path tempDir)
 	{
 		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
 
-		// isWhitelistEnabled/isBlacklistEnabled/isIpBanEnabled are read on every single login via
-		// each list's isActivated(), so warning from the getter itself would repeat on every
-		// connection instead of once per config load - the warning must fire during load(), and
-		// repeated getter calls afterwards must not add more warnings.
+		// This is read on every single login via each list's isActivated(), so a warning from the getter would repeat itself constantly vs. once per config load.
 		config.load("version: 2\nwhitelist_enabled: \"true\"\nblacklist_enabled: true\nipban_enabled: true\n");
 		verify(logger, times(1)).warn(anyString(), any(), any());
 
@@ -59,50 +58,50 @@ class ConfigurationTest
 		verify(logger, times(1)).warn(anyString(), any(), any());
 	}
 
+	// Ensure that migration accepts the version as a quoted string
 	@Test
 	void migrate_acceptsVersionAsQuotedString(@TempDir Path tempDir)
 	{
 		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
 
-		// version detection must not only accept a YAML Number for "version"/"_version" - a
-		// hand-quoted `version: "2"` parses as a String, and an already-current config must not
-		// be treated as legacy and re-migrated (including rewriting the file) on every load.
+		// Version detection must not only accept a YAML number for version but also a hand-quoted string, and an already-current config must not be treated as legacy and re-migrated on every load
 		config.load("version: \"2\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
 
 		verify(logger, never()).warn(eq("Migrating config file from {} to v{}"), any(), any());
 	}
 
+	// Ensure that migration accepts an oversized quoted version without throwing an exception
 	@Test
 	void migrate_acceptsOversizedQuotedVersion_withoutThrowing(@TempDir Path tempDir)
 	{
 		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
 
-		// A digit-only quoted version larger than Integer.MAX_VALUE still matches the "\\d+" check,
-		// so Integer.parseInt(s) would throw NumberFormatException and fail the entire config load
-		// instead of just treating it as an already-current (if nonsensical) version.
+		// A digit-only quoted version larger than Integer.MAX_VALUE still matches regex check, so it is treated as an already-current version
 		assertDoesNotThrow(() -> config.load("version: \"99999999999999999999\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n"));
+
 		verify(logger, never()).warn(eq("Migrating config file from {} to v{}"), any(), any());
 	}
 
+	// Ensure that blacklist_on_ipban_join with a non-boolean value logs a warning
 	@Test
 	void blacklistOnIpBanJoin_withNonBooleanValue_shouldWarn(@TempDir Path tempDir)
 	{
 		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
 
-		// blacklist_on_ipban_join is a boolean option just like whitelist_enabled/blacklist_enabled/
-		// ipban_enabled, and warnAboutInvalidBooleanOptions() must cover it too, not just the other three.
+		// blacklist_on_ipban_join is a boolean option just like the others and warnAboutInvalidBooleanOptions() must cover it too
 		config.load("version: 2\nidentify_mode: uuid\nblacklist_on_ipban_join: \"true\"\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
 
 		verify(logger, atLeastOnce()).warn(anyString(), any(), any());
 	}
 
+	// Ensure that isBlacklistOnIpBanJoin requires UUID mode and online mode
 	@Test
 	void isBlacklistOnIpBanJoin_requiresUuidModeAndOnlineMode(@TempDir Path tempDir)
 	{
 		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> false);
 		config.load("version: 2\nidentify_mode: uuid\nblacklist_on_ipban_join: true\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
 
-		// sanity check on an already-defended piece of logic: offline-mode proxy must force this off
+		// Sanity check on an already-defended piece of logic to ensure the offline-mode proxy forces this off
 		assertTrue(!config.isBlacklistOnIpBanJoin(), "blacklist_on_ipban_join must stay off when the proxy isn't in online mode");
 	}
 }

@@ -23,9 +23,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import com.velocitypowered.api.proxy.ProxyServer;
 
+// API wrapper for Mojang services
 public class MojangAPI
 {
-	// https://wiki.vg/Mojang_API#Username_to_UUID
+	// Represents the response object from the Mojang API based on https://wiki.vg/Mojang_API#Username_to_UUID
 	private static class ResponseObject
 	{
 		public String name;
@@ -33,24 +34,27 @@ public class MojangAPI
 		public String errorMessage;
 	}
 
+	// Represents a cached query entry for a player name
 	private record QueryCacheEntry(String queryName, @Nullable QueryResult result, long expireAtMs)
 	{
 	}
 
+	// Represents the result of a successful query containing the UUID and player name
 	public record QueryResult(UUID uuid, String playerName)
 	{
 	}
 
 	private static final String ACCOUNT_URL_BASE = System.getProperty("velocitywhitelist.mojang.accountserver", "https://api.mojang.com/users/profiles/minecraft/");
-	private static final int QUERY_CACHE_TTL_MS = 5 * 60 * 1000;  // 5min
-	private static final int QUERY_CACHE_EMPTY_TTL_MS = 60 * 1000;  // 1min
+	private static final int QUERY_CACHE_TTL_MS = 5 * 60 * 1000;
+	private static final int QUERY_CACHE_EMPTY_TTL_MS = 60 * 1000;
 	private static final int QUERY_CACHE_CAPACITY = 100;
 	private static final List<QueryCacheEntry> queryCache = Lists.newLinkedList();
+	private static volatile HttpClient cachedClient;
 
+	// Queries a player by their name
 	public static Optional<QueryResult> queryPlayerByName(Logger logger, ProxyServer server, String name)
 	{
-		// Mojang's name lookup is case-insensitive, so the cache is keyed on the lowercased name
-		// to avoid a needless duplicate API call/entry for "Steve" vs "steve".
+		// Mojang's name lookup is case-insensitive so the cache is keyed on the lowercased name to avoid a needless duplicate API call or entry for "Steve" vs "steve"
 		String cacheKey = name.toLowerCase(Locale.ROOT);
 		synchronized (queryCache)
 		{
@@ -64,6 +68,7 @@ public class MojangAPI
 				}
 			}
 		}
+
 		BiConsumer<@Nullable QueryResult, Integer> addQueryCache = (qr, ttl) -> {
 			synchronized (queryCache)
 			{
@@ -94,9 +99,7 @@ public class MojangAPI
 			}
 			catch (JsonParseException e)
 			{
-				// e.g. an HTML error page from a CDN/reverse-proxy during a Mojang outage or rate-limit,
-				// served with a non-204 status. Treat it the same as any other lookup failure instead of
-				// letting it escape uncaught.
+				// Treat HTML error pages from CDNs or reverse-proxies during outages or rate-limits served with a non-204 status as any other lookup failure instead of letting them escape uncaught
 				logger.warn("Mojang API returned an unparsable response (status {}): {}", response.statusCode(), e.toString());
 				return Optional.empty();
 			}
@@ -121,12 +124,7 @@ public class MojangAPI
 		}
 	}
 
-	private static volatile HttpClient cachedClient;
-
-	/**
-	 * Lazily builds and reuses a single HttpClient for the plugin's lifetime, rather than paying for
-	 * a fresh client (and its own internal thread pool, plus a repeat reflection probe) on every lookup
-	 */
+	// Lazily builds and reuses a single HttpClient for the plugin's lifetime rather than paying for a fresh client and its own internal thread pool and a repeat reflection probe on every lookup
 	private static HttpClient getHttpClient(ProxyServer server)
 	{
 		HttpClient client = cachedClient;
@@ -145,11 +143,12 @@ public class MojangAPI
 		return client;
 	}
 
+	// Creates a new HTTP client instance
 	private static HttpClient createHttpClient(ProxyServer server)
 	{
 		try
 		{
-			// try using the auth proxy setting from https://github.com/TISUnion/Velocity
+			// Try using the auth proxy setting from https://github.com/TISUnion/Velocity
 			Class<?> clazz = Class.forName("com.velocitypowered.proxy.VelocityServer");
 			if (clazz.isInstance(server))
 			{
@@ -164,8 +163,7 @@ public class MojangAPI
 		}
 		catch (ReflectiveOperationException | RuntimeException ignored)
 		{
-			// best-effort optimization only (e.g. setAccessible can throw InaccessibleObjectException
-			// under strong module encapsulation); any failure here just falls back to a plain client
+			// Best-effort optimisation only as setAccessible can throw InaccessibleObjectException under strong module encapsulation and any failure here just falls back to a plain client
 		}
 		return HttpClient.newBuilder().build();
 	}

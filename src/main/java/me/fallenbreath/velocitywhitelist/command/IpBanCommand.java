@@ -17,16 +17,19 @@ import me.fallenbreath.velocitywhitelist.WhitelistManager;
 import me.fallenbreath.velocitywhitelist.config.IpList;
 import net.kyori.adventure.text.Component;
 
+// Class for the IP ban command
 public class IpBanCommand
 {
 	private final WhitelistManager manager;
 
+	// Constructs a new IP ban command
 	public IpBanCommand(WhitelistManager whitelistManager)
 	{
 		this.manager = whitelistManager;
 	}
 
-	@SuppressWarnings("deprecation")  // Next time for sure...
+	// Registers the command with the command manager
+	@SuppressWarnings("deprecation") // Next time for sure...
 	public void register(CommandManager commandManager)
 	{
 		var roots = new String[]{"ipban", "vipban"};
@@ -35,8 +38,7 @@ public class IpBanCommand
 				requires(s -> s.hasPermission(PluginMeta.ID + ".command")).
 				executes(c -> showStatus(c.getSource())).
 				then(literal("add").
-						// greedyString instead of string/word: brigadier's unquoted strings cannot contain ':',
-						// so IPv6 addresses would otherwise require quoting to parse
+						// Use greedyString instead of string/word as Brigadier's unquoted strings cannot contain colons so IPv6 addresses would otherwise require quoting to parse
 						then(argument("ip", greedyString()).
 								executes(c -> addIp(c.getSource(), getString(c, "ip")))
 						)
@@ -55,13 +57,14 @@ public class IpBanCommand
 				);
 
 		var rootNode = root.build();
+
 		commandManager.register(new BrigadierCommand(rootNode));
 
 		for (int i = 1; i < roots.length; i++)
 		{
 			var alternative = literal(roots[i]).
 					requires(s -> s.hasPermission(PluginMeta.ID + ".command")).
-					// a bare redirect node is not executable in brigadier, so the alias needs its own executes
+					// A bare redirect node is not executable in Brigadier so the alias needs its own executes
 					executes(c -> showStatus(c.getSource())).
 					redirect(rootNode);
 
@@ -69,10 +72,7 @@ public class IpBanCommand
 		}
 	}
 
-	/**
-	 * Parses the given command argument into a canonical IP literal.
-	 * Sends an error message to the command source and returns empty if the input is not a valid IP address
-	 */
+	// Parses the given command argument into a canonical IP literal and sends an error message to the command source returning empty if the input is not a valid IP address
 	private Optional<String> parseIpArgument(CommandSource source, String ipStr)
 	{
 		Optional<String> normalized = IpList.normalizeIpLiteral(ipStr);
@@ -83,6 +83,7 @@ public class IpBanCommand
 		return normalized;
 	}
 
+	// Shows the status of the IP ban list
 	private int showStatus(CommandSource source)
 	{
 		IpList list = this.manager.getIpBanList();
@@ -92,6 +93,7 @@ public class IpBanCommand
 		return 1;
 	}
 
+	// Adds an IP to the ban list
 	private int addIp(CommandSource source, String ipStr)
 	{
 		IpList list = this.manager.getIpBanList();
@@ -110,6 +112,7 @@ public class IpBanCommand
 		return this.manager.addIp(source, parsed.get()) ? 1 : 0;
 	}
 
+	// Removes an IP from the ban list
 	private int removeIp(CommandSource source, String ipStr)
 	{
 		IpList list = this.manager.getIpBanList();
@@ -128,6 +131,7 @@ public class IpBanCommand
 		return this.manager.removeIp(source, parsed.get()) ? 1 : 0;
 	}
 
+	// Lists all banned IPs
 	private int listIps(CommandSource source)
 	{
 		IpList list = this.manager.getIpBanList();
@@ -143,6 +147,7 @@ public class IpBanCommand
 		return ips.size();
 	}
 
+	// Reloads the IP ban list
 	private int reloadList(CommandSource source)
 	{
 		IpList list = this.manager.getIpBanList();
