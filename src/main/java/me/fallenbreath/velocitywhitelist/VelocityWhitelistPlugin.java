@@ -24,85 +24,112 @@ import me.fallenbreath.velocitywhitelist.config.Configuration;
 
 // Represents the main plugin class for VelocityWhitelistExtended
 @Plugin(
-		id = PluginMeta.ID, name = PluginMeta.NAME, version = PluginMeta.VERSION,
-		url = PluginMeta.REPOSITORY_URL,
-		description = "A simple whitelist plugin for velocity",
-		authors = {"Fallen_Breath", "no7here"}
+    id = PluginMeta.ID,
+    name = PluginMeta.NAME,
+    version = PluginMeta.VERSION,
+    url = PluginMeta.REPOSITORY_URL,
+    description = "A simple whitelist plugin for velocity",
+    authors = { "Fallen_Breath", "no7here" }
 )
-public class VelocityWhitelistPlugin
-{
-	private final ProxyServer server;
-	private final Logger logger;
-	private final Path dataDirectory;
-	private final Path configFilePath;
-	private final Configuration config;
-	private final WhitelistManager whitelistManager;
+public class VelocityWhitelistPlugin {
 
-	// Initialises the plugin with injected dependencies
-	@Inject
-	public VelocityWhitelistPlugin(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory)
-	{
-		this.server = server;
-		this.logger = logger;
-		this.dataDirectory = dataDirectory;
-		this.configFilePath = dataDirectory.resolve("config.yml");
-		this.config = new Configuration(this.logger, this.configFilePath, () -> server.getConfiguration().isOnlineMode());
-		this.whitelistManager = new WhitelistManager(logger, this.config, this.dataDirectory, this.server);
-	}
+    private final ProxyServer server;
+    private final Logger logger;
+    private final Path dataDirectory;
+    private final Path configFilePath;
+    private final Configuration config;
+    private final WhitelistManager whitelistManager;
 
-	// Handles the proxy initialisation event
-	@Subscribe
-	public void onProxyInitialization(ProxyInitializeEvent event)
-	{
-		if (!this.prepareConfig())
-		{
-			this.logger.error("Failed to prepare config, the plugin will not work");
-			return;
-		}
+    // Initialises the plugin with injected dependencies
+    @Inject
+    public VelocityWhitelistPlugin(
+        ProxyServer server,
+        Logger logger,
+        @DataDirectory Path dataDirectory
+    ) {
+        this.server = server;
+        this.logger = logger;
+        this.dataDirectory = dataDirectory;
+        this.configFilePath = dataDirectory.resolve("config.yml");
+        this.config = new Configuration(this.logger, this.configFilePath, () ->
+            server.getConfiguration().isOnlineMode()
+        );
+        this.whitelistManager = new WhitelistManager(
+            logger,
+            this.config,
+            this.dataDirectory,
+            this.server
+        );
+    }
 
-		this.whitelistManager.loadLists();
+    // Handles the proxy initialisation event
+    @Subscribe
+    public void onProxyInitialization(ProxyInitializeEvent event) {
+        if (!this.prepareConfig()) {
+            this.logger.error(
+                "Failed to prepare config, the plugin will not work"
+            );
+            return;
+        }
 
-		this.server.getEventManager().register(this, LoginEvent.class, this.whitelistManager::onPlayerLogin);
-		new WhitelistCommand(this.whitelistManager).register(this.server.getCommandManager());
-		new IpBanCommand(this.whitelistManager).register(this.server.getCommandManager());
-		new PluginControlCommand(this.logger, this.config, this.whitelistManager).register(this.server.getCommandManager());
-	}
+        this.whitelistManager.loadLists();
 
-	// Prepares the plugin configuration and data directory
-	private boolean prepareConfig()
-	{
-		if (!this.dataDirectory.toFile().exists() && !this.dataDirectory.toFile().mkdirs())
-		{
-			this.logger.error("Create data directory failed");
-			return false;
-		}
+        this.server
+            .getEventManager()
+            .register(
+                this,
+                LoginEvent.class,
+                this.whitelistManager::onPlayerLogin
+            );
+        new WhitelistCommand(this.whitelistManager).register(
+            this.server.getCommandManager()
+        );
+        new IpBanCommand(this.whitelistManager).register(
+            this.server.getCommandManager()
+        );
+        new PluginControlCommand(
+            this.logger,
+            this.config,
+            this.whitelistManager
+        ).register(this.server.getCommandManager());
+    }
 
-		File file = this.configFilePath.toFile();
+    // Prepares the plugin configuration and data directory
+    private boolean prepareConfig() {
+        if (
+            !this.dataDirectory.toFile().exists() &&
+            !this.dataDirectory.toFile().mkdirs()
+        ) {
+            this.logger.error("Create data directory failed");
+            return false;
+        }
 
-		if (!file.exists())
-		{
-			try (InputStream in = this.getClass().getClassLoader().getResourceAsStream("config.yml"))
-			{
-				String defaultConfig = new String(Objects.requireNonNull(in).readAllBytes(), StandardCharsets.UTF_8);
-				Files.writeString(file.toPath(), defaultConfig);
-			}
-			catch (Exception e)
-			{
-				this.logger.error("Generate default config failed", e);
-				return false;
-			}
-		}
+        File file = this.configFilePath.toFile();
 
-		try
-		{
-			this.config.load(Files.readString(file.toPath()));
-		}
-		catch (Exception e)
-		{
-			this.logger.error("Read config failed", e);
-			return false;
-		}
+        if (!file.exists()) {
+            try (
+                InputStream in = this.getClass()
+                    .getClassLoader()
+                    .getResourceAsStream("config.yml")
+            ) {
+                String defaultConfig = new String(
+                    Objects.requireNonNull(in).readAllBytes(),
+                    StandardCharsets.UTF_8
+                );
+                Files.writeString(file.toPath(), defaultConfig);
+            } catch (Exception e) {
+                this.logger.error("Generate default config failed", e);
+                return false;
+            }
+        }
 
-		return true;
-	}
+        try {
+            this.config.load(Files.readString(file.toPath()));
+        } catch (Exception e) {
+            this.logger.error("Read config failed", e);
+            return false;
+        }
+
+        return true;
+    }
 }

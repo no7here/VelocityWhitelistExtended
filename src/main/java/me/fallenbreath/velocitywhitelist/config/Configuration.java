@@ -16,155 +16,161 @@ import me.fallenbreath.velocitywhitelist.IdentifyMode;
 import me.fallenbreath.velocitywhitelist.utils.FileUtils;
 
 // Manages the configuration settings for the VelocityWhitelist plugin
-public class Configuration
-{
-	// Bundles every field derived from a single load or reload so it can be published as one unit
-	private static final class Snapshot
-	{
-		// Defines an empty snapshot used as the initial state
-		private static final Snapshot EMPTY = new Snapshot(Collections.emptyMap(), IdentifyMode.DEFAULT);
+public class Configuration {
 
-		private final Map<String, Object> options;
-		private final IdentifyMode identifyMode;
+    // Bundles every field derived from a single load or reload so it can be published as one unit
+    private static final class Snapshot {
 
-		// Initialises a new configuration snapshot with the given options and identify mode
-		private Snapshot(Map<String, Object> options, IdentifyMode identifyMode)
-		{
-			this.options = options;
-			this.identifyMode = identifyMode;
-		}
-	}
+        // Defines an empty snapshot used as the initial state
+        private static final Snapshot EMPTY = new Snapshot(
+            Collections.emptyMap(),
+            IdentifyMode.DEFAULT
+        );
 
-	// Replaced atomically on every reload with a single volatile write so login-time readers never observe options and identify mode from two different loads mixed together
-	private volatile Snapshot snapshot = Snapshot.EMPTY;
-	private final Logger logger;
-	private final Path configFilePath;
-	private final ConfigMigrator migrator;
-	private final ConfigWarnings warnings;
+        private final Map<String, Object> options;
+        private final IdentifyMode identifyMode;
 
-	// Initialises the configuration manager with the required dependencies
-	public Configuration(Logger logger, Path configFilePath, Supplier<Boolean> proxyOnlineModeGetter)
-	{
-		this.logger = logger;
-		this.configFilePath = configFilePath;
-		this.migrator = new ConfigMigrator(logger, configFilePath);
-		this.warnings = new ConfigWarnings(logger, proxyOnlineModeGetter);
-	}
+        // Initialises a new configuration snapshot with the given options and identify mode
+        private Snapshot(
+            Map<String, Object> options,
+            IdentifyMode identifyMode
+        ) {
+            this.options = options;
+            this.identifyMode = identifyMode;
+        }
+    }
 
-	// Parses the YAML content and updates the configuration state safely
-	@SuppressWarnings("unchecked")
-	public void load(String yamlContent)
-	{
-		// Parses and migrates into a staging map before publishing so a malformed config during a reload keeps the previous state enforced and concurrent logins never see a half-built option set
-		Map<String, Object> loadedOptions = (Map<String, Object>)FileUtils.newSafeYaml().load(yamlContent);
+    // Replaced atomically on every reload with a single volatile write so login-time readers never observe options and identify mode from two different loads mixed together
+    private volatile Snapshot snapshot = Snapshot.EMPTY;
+    private final Logger logger;
+    private final Path configFilePath;
+    private final ConfigMigrator migrator;
+    private final ConfigWarnings warnings;
 
-		Map<String, Object> stagedOptions = Maps.newLinkedHashMap();
-		if (loadedOptions != null)
-		{
-			stagedOptions.putAll(loadedOptions);
-		}
-		stagedOptions = this.migrator.migrate(stagedOptions);
-		stagedOptions = Collections.unmodifiableMap(stagedOptions);
+    // Initialises the configuration manager with the required dependencies
+    public Configuration(
+        Logger logger,
+        Path configFilePath,
+        Supplier<Boolean> proxyOnlineModeGetter
+    ) {
+        this.logger = logger;
+        this.configFilePath = configFilePath;
+        this.migrator = new ConfigMigrator(logger, configFilePath);
+        this.warnings = new ConfigWarnings(logger, proxyOnlineModeGetter);
+    }
 
-		IdentifyMode identifyMode = makeIdentifyMode(stagedOptions, this.logger);
-		this.snapshot = new Snapshot(stagedOptions, identifyMode);
-		this.warnings.warnAboutRiskyOptions(stagedOptions, identifyMode);
-		this.warnings.warnAboutInvalidBooleanOptions(stagedOptions);
-	}
+    // Parses the YAML content and updates the configuration state safely
+    @SuppressWarnings("unchecked")
+    public void load(String yamlContent) {
+        // Parses and migrates into a staging map before publishing so a malformed config during a reload keeps the previous state enforced and concurrent logins never see a half-built option set
+        Map<String, Object> loadedOptions = (Map<
+            String,
+            Object
+        >) FileUtils.newSafeYaml().load(yamlContent);
 
-	// Reads the configuration file from disk and loads it into memory
-	public void reload() throws IOException
-	{
-		String content = Files.readString(this.configFilePath);
-		this.load(content);
-	}
+        Map<String, Object> stagedOptions = Maps.newLinkedHashMap();
+        if (loadedOptions != null) {
+            stagedOptions.putAll(loadedOptions);
+        }
+        stagedOptions = this.migrator.migrate(stagedOptions);
+        stagedOptions = Collections.unmodifiableMap(stagedOptions);
 
-	// Extracts and validates the identify mode from the configuration options
-	private static IdentifyMode makeIdentifyMode(Map<String, Object> options, Logger logger)
-	{
-		Object mode = options.get("identify_mode");
-		if (mode instanceof String)
-		{
-			try
-			{
-				return IdentifyMode.valueOf(((String)mode).toUpperCase());
-			}
-			catch (IllegalArgumentException e)
-			{
-				logger.warn("Invalid identify mode: {}, use default value {}", mode, IdentifyMode.DEFAULT.name().toLowerCase(Locale.ROOT));
-			}
-		}
-		return IdentifyMode.DEFAULT;
-	}
+        IdentifyMode identifyMode = makeIdentifyMode(
+            stagedOptions,
+            this.logger
+        );
+        this.snapshot = new Snapshot(stagedOptions, identifyMode);
+        this.warnings.warnAboutRiskyOptions(stagedOptions, identifyMode);
+        this.warnings.warnAboutInvalidBooleanOptions(stagedOptions);
+    }
 
-	// Checks if the whitelist feature is enabled in the configuration
-	public boolean isWhitelistEnabled()
-	{
-		return this.getBooleanOption("whitelist_enabled");
-	}
+    // Reads the configuration file from disk and loads it into memory
+    public void reload() throws IOException {
+        String content = Files.readString(this.configFilePath);
+        this.load(content);
+    }
 
-	// Checks if the blacklist feature is enabled in the configuration
-	public boolean isBlacklistEnabled()
-	{
-		return this.getBooleanOption("blacklist_enabled");
-	}
+    // Extracts and validates the identify mode from the configuration options
+    private static IdentifyMode makeIdentifyMode(
+        Map<String, Object> options,
+        Logger logger
+    ) {
+        Object mode = options.get("identify_mode");
+        if (mode instanceof String) {
+            try {
+                return IdentifyMode.valueOf(((String) mode).toUpperCase());
+            } catch (IllegalArgumentException e) {
+                logger.warn(
+                    "Invalid identify mode: {}, use default value {}",
+                    mode,
+                    IdentifyMode.DEFAULT.name().toLowerCase(Locale.ROOT)
+                );
+            }
+        }
+        return IdentifyMode.DEFAULT;
+    }
 
-	// Checks if the IP ban feature is enabled in the configuration
-	public boolean isIpBanEnabled()
-	{
-		return this.getBooleanOption("ipban_enabled");
-	}
+    // Checks if the whitelist feature is enabled in the configuration
+    public boolean isWhitelistEnabled() {
+        return this.getBooleanOption("whitelist_enabled");
+    }
 
-	// Invalid values are warned about once per load in ConfigWarnings, not here as this getter is called on every login, so it must stay a pure read with no logging side effects
-	private boolean getBooleanOption(String key)
-	{
-		Object value = this.snapshot.options.get(key);
-		return value instanceof Boolean b && b;
-	}
+    // Checks if the blacklist feature is enabled in the configuration
+    public boolean isBlacklistEnabled() {
+        return this.getBooleanOption("blacklist_enabled");
+    }
 
-	// Checks if players should be automatically added to the blacklist when they attempt to join with a banned IP
-	public boolean isBlacklistOnIpBanJoin()
-	{
-		Snapshot snapshot = this.snapshot;
-		return ConfigWarnings.isBlacklistOnIpBanJoinConfigured(snapshot.options) && this.warnings.meetsBlacklistOnIpBanJoinRequirements(snapshot.identifyMode);
-	}
+    // Checks if the IP ban feature is enabled in the configuration
+    public boolean isIpBanEnabled() {
+        return this.getBooleanOption("ipban_enabled");
+    }
 
-	// Retrieves the currently configured identify mode
-	public IdentifyMode getIdentifyMode()
-	{
-		return this.snapshot.identifyMode;
-	}
+    // Invalid values are warned about once per load in ConfigWarnings, not here as this getter is called on every login, so it must stay a pure read with no logging side effects
+    private boolean getBooleanOption(String key) {
+        Object value = this.snapshot.options.get(key);
+        return value instanceof Boolean b && b;
+    }
 
-	// Retrieves the kick message displayed to players who are not on the whitelist
-	public String getWhitelistKickMessage()
-	{
-		Object message = this.snapshot.options.get("whitelist_kick_message");
-		if (message instanceof String)
-		{
-			return (String)message;
-		}
-		return "You are not in the whitelist!";
-	}
+    // Checks if players should be automatically added to the blacklist when they attempt to join with a banned IP
+    public boolean isBlacklistOnIpBanJoin() {
+        Snapshot snapshot = this.snapshot;
+        return (
+            ConfigWarnings.isBlacklistOnIpBanJoinConfigured(snapshot.options) &&
+            this.warnings.meetsBlacklistOnIpBanJoinRequirements(
+                snapshot.identifyMode
+            )
+        );
+    }
 
-	// Retrieves the kick message displayed to players who are on the blacklist
-	public String getBlacklistKickMessage()
-	{
-		Object message = this.snapshot.options.get("blacklist_kick_message");
-		if (message instanceof String)
-		{
-			return (String)message;
-		}
-		return "You are banned from the server!";
-	}
+    // Retrieves the currently configured identify mode
+    public IdentifyMode getIdentifyMode() {
+        return this.snapshot.identifyMode;
+    }
 
-	// Retrieves the kick message displayed to players attempting to join from a banned IP address
-	public String getIpBanKickMessage()
-	{
-		Object message = this.snapshot.options.get("ipban_kick_message");
-		if (message instanceof String)
-		{
-			return (String)message;
-		}
-		return "Your IP address is banned from the server!";
-	}
+    // Retrieves the kick message displayed to players who are not on the whitelist
+    public String getWhitelistKickMessage() {
+        Object message = this.snapshot.options.get("whitelist_kick_message");
+        if (message instanceof String) {
+            return (String) message;
+        }
+        return "You are not in the whitelist!";
+    }
+
+    // Retrieves the kick message displayed to players who are on the blacklist
+    public String getBlacklistKickMessage() {
+        Object message = this.snapshot.options.get("blacklist_kick_message");
+        if (message instanceof String) {
+            return (String) message;
+        }
+        return "You are banned from the server!";
+    }
+
+    // Retrieves the kick message displayed to players attempting to join from a banned IP address
+    public String getIpBanKickMessage() {
+        Object message = this.snapshot.options.get("ipban_kick_message");
+        if (message instanceof String) {
+            return (String) message;
+        }
+        return "Your IP address is banned from the server!";
+    }
 }

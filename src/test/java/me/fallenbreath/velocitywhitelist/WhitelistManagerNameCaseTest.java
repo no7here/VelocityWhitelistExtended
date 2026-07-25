@@ -1,60 +1,82 @@
 package me.fallenbreath.velocitywhitelist;
 
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.util.GameProfile;
-
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import me.fallenbreath.velocitywhitelist.config.Configuration;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 // Test class for verifying name casing behaviour in the WhitelistManager
-class WhitelistManagerNameCaseTest
-{
-	// Test method to verify that adding a player in name mode stores the resolved canonical case
-	@Test
-	void addPlayer_inNameMode_storesResolvedCanonicalCase_notRawAdminInput(@TempDir Path tempDir) throws Exception
-	{
-		Logger logger = LoggerFactory.getLogger(WhitelistManagerNameCaseTest.class);
+class WhitelistManagerNameCaseTest {
 
-		Configuration config = new Configuration(logger, tempDir.resolve("config.yml"), () -> true);
-		config.load(String.join("\n",
-				"version: 2",
-				"identify_mode: name",
-				"whitelist_enabled: true",
-				"blacklist_enabled: true",
-				"ipban_enabled: true"
-		));
+    // Test method to verify that adding a player in name mode stores the resolved canonical case
+    @Test
+    void addPlayer_inNameMode_storesResolvedCanonicalCase_notRawAdminInput(
+        @TempDir Path tempDir
+    ) throws Exception {
+        Logger logger = LoggerFactory.getLogger(
+            WhitelistManagerNameCaseTest.class
+        );
 
-		ProxyServer server = mock(ProxyServer.class);
-		Player onlinePlayer = mock(Player.class);
-		// Velocity's own online-player lookup is case-insensitive so an admin typing the wrong case still resolves to the real canonically-cased profile which the plugin just has to use
-		GameProfile canonicalProfile = new GameProfile(UUID.randomUUID(), "Steve", List.of());
-		when(onlinePlayer.getGameProfile()).thenReturn(canonicalProfile);
-		when(server.getPlayer("steve")).thenReturn(Optional.of(onlinePlayer));
+        Configuration config = new Configuration(
+            logger,
+            tempDir.resolve("config.yml"),
+            () -> true
+        );
+        config.load(
+            String.join(
+                "\n",
+                "version: 2",
+                "identify_mode: name",
+                "whitelist_enabled: true",
+                "blacklist_enabled: true",
+                "ipban_enabled: true"
+            )
+        );
 
-		WhitelistManager manager = new WhitelistManager(logger, config, tempDir, server);
-		assertTrue(manager.loadLists());
+        ProxyServer server = mock(ProxyServer.class);
+        Player onlinePlayer = mock(Player.class);
+        // Velocity's own online-player lookup is case-insensitive so an admin typing the wrong case still resolves to the real canonically-cased profile which the plugin just has to use
+        GameProfile canonicalProfile = new GameProfile(
+            UUID.randomUUID(),
+            "Steve",
+            List.of()
+        );
+        when(onlinePlayer.getGameProfile()).thenReturn(canonicalProfile);
+        when(server.getPlayer("steve")).thenReturn(Optional.of(onlinePlayer));
 
-		CommandSource source = mock(CommandSource.class);
-		boolean added = manager.addPlayer(source, manager.getWhitelist(), "steve");
+        WhitelistManager manager = new WhitelistManager(
+            logger,
+            config,
+            tempDir,
+            server
+        );
+        assertTrue(manager.loadLists());
 
-		assertTrue(added, "adding the player should succeed");
-		// NAME-mode stores the raw lowercase command argument instead of the resolved canonical name which causes subsequent case-sensitive logins to fail
-		assertTrue(manager.getWhitelist().checkPlayerName("Steve"),
-				"the whitelist should store the resolved canonical-case name so a real login (profile.getName() == \"Steve\") actually matches");
-	}
+        CommandSource source = mock(CommandSource.class);
+        boolean added = manager.addPlayer(
+            source,
+            manager.getWhitelist(),
+            "steve"
+        );
+
+        assertTrue(added, "adding the player should succeed");
+        // NAME-mode stores the raw lowercase command argument instead of the resolved canonical name which causes subsequent case-sensitive logins to fail
+        assertTrue(
+            manager.getWhitelist().checkPlayerName("Steve"),
+            "the whitelist should store the resolved canonical-case name so a real login (profile.getName() == \"Steve\") actually matches"
+        );
+    }
 }

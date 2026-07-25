@@ -23,143 +23,163 @@ import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import com.velocitypowered.api.proxy.ProxyServer;
 
-public class MojangAPI
-{
-	// https://minecraft.wiki/w/Mojang_API#Query_player's_UUID
-	private static class ResponseObject
-	{
-		public String name;
-		public String id;
-		public String errorMessage;
-	}
+public class MojangAPI {
 
-	private record QueryCacheEntry(String queryName, @Nullable QueryResult result, long expireAtMs)
-	{
-	}
+    // https://minecraft.wiki/w/Mojang_API#Query_player's_UUID
+    private static class ResponseObject {
 
-	public record QueryResult(UUID uuid, String playerName)
-	{
-	}
+        public String name;
+        public String id;
+        public String errorMessage;
+    }
 
-	private static final String ACCOUNT_URL_BASE = System.getProperty("velocitywhitelist.mojang.accountserver", "https://api.mojang.com/users/profiles/minecraft/");
-	private static final int QUERY_CACHE_TTL_MS = 5 * 60 * 1000;
-	private static final int QUERY_CACHE_EMPTY_TTL_MS = 60 * 1000;
-	private static final int QUERY_CACHE_CAPACITY = 100;
-	private static final List<QueryCacheEntry> queryCache = Lists.newLinkedList();
-	private static volatile HttpClient cachedClient;
+    private record QueryCacheEntry(
+        String queryName,
+        @Nullable QueryResult result,
+        long expireAtMs
+    ) {}
 
-	public static Optional<QueryResult> queryPlayerByName(Logger logger, ProxyServer server, String name)
-	{
-		// Mojang's name lookup is case-insensitive so the cache is keyed on the lowercased name to avoid a needless duplicate API call or entry for "Steve" vs "steve"
-		String cacheKey = name.toLowerCase(Locale.ROOT);
-		synchronized (queryCache)
-		{
-			long now = System.currentTimeMillis();
-			queryCache.removeIf(e -> now > e.expireAtMs);
-			for (QueryCacheEntry entry : queryCache)
-			{
-				if (Objects.equals(entry.queryName, cacheKey))
-				{
-					return Optional.ofNullable(entry.result());
-				}
-			}
-		}
+    public record QueryResult(UUID uuid, String playerName) {}
 
-		BiConsumer<@Nullable QueryResult, Integer> addQueryCache = (qr, ttl) -> {
-			synchronized (queryCache)
-			{
-				queryCache.add(new QueryCacheEntry(cacheKey, qr, System.currentTimeMillis() + ttl));
-				while (queryCache.size() > QUERY_CACHE_CAPACITY)
-				{
-					queryCache.remove(0);
-				}
-			}
-		};
+    private static final String ACCOUNT_URL_BASE = System.getProperty(
+        "velocitywhitelist.mojang.accountserver",
+        "https://api.mojang.com/users/profiles/minecraft/"
+    );
+    private static final int QUERY_CACHE_TTL_MS = 5 * 60 * 1000;
+    private static final int QUERY_CACHE_EMPTY_TTL_MS = 60 * 1000;
+    private static final int QUERY_CACHE_CAPACITY = 100;
+    private static final List<QueryCacheEntry> queryCache =
+        Lists.newLinkedList();
+    private static volatile HttpClient cachedClient;
 
-		String url = ACCOUNT_URL_BASE + name;
-		HttpClient client = getHttpClient(server);
+    public static Optional<QueryResult> queryPlayerByName(
+        Logger logger,
+        ProxyServer server,
+        String name
+    ) {
+        // Mojang's name lookup is case-insensitive so the cache is keyed on the lowercased name to avoid a needless duplicate API call or entry for "Steve" vs "steve"
+        String cacheKey = name.toLowerCase(Locale.ROOT);
+        synchronized (queryCache) {
+            long now = System.currentTimeMillis();
+            queryCache.removeIf(e -> now > e.expireAtMs);
+            for (QueryCacheEntry entry : queryCache) {
+                if (Objects.equals(entry.queryName, cacheKey)) {
+                    return Optional.ofNullable(entry.result());
+                }
+            }
+        }
 
-		HttpRequest request = HttpRequest.newBuilder()
-				.GET()
-				.uri(URI.create(url))
-				.timeout(Duration.ofSeconds(5))
-				.build();
-		try
-		{
-			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        BiConsumer<@Nullable QueryResult, Integer> addQueryCache = (
+            qr,
+            ttl
+        ) -> {
+            synchronized (queryCache) {
+                queryCache.add(
+                    new QueryCacheEntry(
+                        cacheKey,
+                        qr,
+                        System.currentTimeMillis() + ttl
+                    )
+                );
+                while (queryCache.size() > QUERY_CACHE_CAPACITY) {
+                    queryCache.remove(0);
+                }
+            }
+        };
 
-			ResponseObject obj;
-			try
-			{
-				obj = new Gson().fromJson(response.body(), ResponseObject.class);
-			}
-			catch (JsonParseException e)
-			{
-				// Treat HTML error pages from CDNs or reverse-proxies during outages or rate-limits served with a non-204 status as any other lookup failure instead of letting them escape uncaught
-				logger.warn("Mojang API returned an unparsable response (status {}): {}", response.statusCode(), e.toString());
-				return Optional.empty();
-			}
+        String url = ACCOUNT_URL_BASE + name;
+        HttpClient client = getHttpClient(server);
 
-			if (obj == null || response.statusCode() == 204 || (obj.errorMessage != null && obj.errorMessage.startsWith("Couldn't find any profile with that name")))
-			{
-				addQueryCache.accept(null, QUERY_CACHE_EMPTY_TTL_MS);
-			}
+        HttpRequest request = HttpRequest.newBuilder()
+            .GET()
+            .uri(URI.create(url))
+            .timeout(Duration.ofSeconds(5))
+            .build();
+        try {
+            HttpResponse<String> response = client.send(
+                request,
+                HttpResponse.BodyHandlers.ofString()
+            );
 
-			if (obj == null || Strings.isNullOrEmpty(obj.id))
-			{
-				return Optional.empty();
-			}
-			var ret = UuidUtils.tryParseUuid(obj.id).map(uuid -> new QueryResult(uuid, obj.name));
-			ret.ifPresent(result -> addQueryCache.accept(result, QUERY_CACHE_TTL_MS));
-			return ret;
-		}
-		catch (IOException | InterruptedException | IllegalArgumentException e)
-		{
-			logger.warn("Get UUID from mojang API failed: {}", e.toString());
-			return Optional.empty();
-		}
-	}
+            ResponseObject obj;
+            try {
+                obj = new Gson().fromJson(
+                    response.body(),
+                    ResponseObject.class
+                );
+            } catch (JsonParseException e) {
+                // Treat HTML error pages from CDNs or reverse-proxies during outages or rate-limits served with a non-204 status as any other lookup failure instead of letting them escape uncaught
+                logger.warn(
+                    "Mojang API returned an unparsable response (status {}): {}",
+                    response.statusCode(),
+                    e.toString()
+                );
+                return Optional.empty();
+            }
 
-	// Lazily builds and reuses a single HttpClient for the plugin's lifetime rather than paying for a fresh client and its own internal thread pool and a repeat reflection probe on every lookup
-	private static HttpClient getHttpClient(ProxyServer server)
-	{
-		HttpClient client = cachedClient;
-		if (client == null)
-		{
-			synchronized (MojangAPI.class)
-			{
-				client = cachedClient;
-				if (client == null)
-				{
-					client = createHttpClient(server);
-					cachedClient = client;
-				}
-			}
-		}
-		return client;
-	}
+            if (
+                obj == null ||
+                response.statusCode() == 204 ||
+                (obj.errorMessage != null &&
+                    obj.errorMessage.startsWith(
+                        "Couldn't find any profile with that name"
+                    ))
+            ) {
+                addQueryCache.accept(null, QUERY_CACHE_EMPTY_TTL_MS);
+            }
 
-	private static HttpClient createHttpClient(ProxyServer server)
-	{
-		try
-		{
-			// Try using the auth proxy setting from https://github.com/TISUnion/Velocity
-			Class<?> clazz = Class.forName("com.velocitypowered.proxy.VelocityServer");
-			if (clazz.isInstance(server))
-			{
-				Method method = clazz.getMethod("createProxiedHttpClient");
-				method.setAccessible(true);
-				Object client = method.invoke(server);
-				if (client instanceof HttpClient httpClient)
-				{
-					return httpClient;
-				}
-			}
-		}
-		catch (ReflectiveOperationException | RuntimeException ignored)
-		{
-			// Optional optimisation only, so any failure here just falls back to a plain client
-		}
-		return HttpClient.newBuilder().build();
-	}
+            if (obj == null || Strings.isNullOrEmpty(obj.id)) {
+                return Optional.empty();
+            }
+            var ret = UuidUtils.tryParseUuid(obj.id).map(uuid ->
+                new QueryResult(uuid, obj.name)
+            );
+            ret.ifPresent(result ->
+                addQueryCache.accept(result, QUERY_CACHE_TTL_MS)
+            );
+            return ret;
+        } catch (
+            IOException
+            | InterruptedException
+            | IllegalArgumentException e
+        ) {
+            logger.warn("Get UUID from mojang API failed: {}", e.toString());
+            return Optional.empty();
+        }
+    }
+
+    // Lazily builds and reuses a single HttpClient for the plugin's lifetime rather than paying for a fresh client and its own internal thread pool and a repeat reflection probe on every lookup
+    private static HttpClient getHttpClient(ProxyServer server) {
+        HttpClient client = cachedClient;
+        if (client == null) {
+            synchronized (MojangAPI.class) {
+                client = cachedClient;
+                if (client == null) {
+                    client = createHttpClient(server);
+                    cachedClient = client;
+                }
+            }
+        }
+        return client;
+    }
+
+    private static HttpClient createHttpClient(ProxyServer server) {
+        try {
+            // Try using the auth proxy setting from https://github.com/TISUnion/Velocity
+            Class<?> clazz = Class.forName(
+                "com.velocitypowered.proxy.VelocityServer"
+            );
+            if (clazz.isInstance(server)) {
+                Method method = clazz.getMethod("createProxiedHttpClient");
+                method.setAccessible(true);
+                Object client = method.invoke(server);
+                if (client instanceof HttpClient httpClient) {
+                    return httpClient;
+                }
+            }
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // Optional optimisation only, so any failure here just falls back to a plain client
+        }
+        return HttpClient.newBuilder().build();
+    }
 }
