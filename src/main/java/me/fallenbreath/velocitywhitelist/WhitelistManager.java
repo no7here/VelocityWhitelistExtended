@@ -175,23 +175,24 @@ public class WhitelistManager {
         NameModeHandler handleNameMode,
         UuidHandler handleUuidMode
     ) {
-        // UUID: read directly from the input value, if it parses as one
         final Optional<UUID> inputUuid = UuidUtils.tryParseUuid(value);
+        final boolean isUuidInput = inputUuid.isPresent();
 
-        Optional<UUID> uuid = inputUuid;
-        // profile: the matching online player, if any, looked up by input value (name or UUID)
-        Optional<GameProfile> profile = this.server
-            .getPlayer(value)
-            .map(Player::getGameProfile);
+        final Optional<GameProfile> profile;
+        if (isUuidInput) {
+            // Input is a UUID - try to get the profile from an online player
+            profile = inputUuid
+                .flatMap(this.server::getPlayer)
+                .map(Player::getGameProfile);
+        } else {
+            // Input is a name - try to get the profile from an online player, or fallback to Mojang API / offline mode
+            Optional<GameProfile> onlineProfile = this.server
+                .getPlayer(value)
+                .map(Player::getGameProfile);
 
-        if (uuid.isEmpty()) {
-            // UUID wasn't given directly: fall back to the online player's UUID, if found above
-            uuid = profile.map(GameProfile::getId);
-        }
-        // Also needed in NAME mode to resolve a canonical-case name for offline targets
-        if (uuid.isEmpty() && profile.isEmpty()) {
-            if (this.server.getConfiguration().isOnlineMode()) {
-                // Input is a name and the player isn't online: look it up via the Mojang API
+            if (onlineProfile.isPresent()) {
+                profile = onlineProfile;
+            } else if (this.server.getConfiguration().isOnlineMode()) {
                 profile = MojangAPI.queryPlayerByName(
                     this.logger,
                     this.server,
@@ -200,11 +201,7 @@ public class WhitelistManager {
                     new GameProfile(r.uuid(), r.playerName(), List.of())
                 );
             } else {
-                // Proxy is offline-mode: derive the same UUID the server itself would assign
                 UUID offlineUuid = UuidUtils.getOfflinePlayerUuid(value);
-                profile = Optional.of(
-                    new GameProfile(offlineUuid, value, List.of())
-                );
                 source.sendPlainMessage(
                     String.format(
                         "Inferred offline uuid from player name %s: %s",
@@ -212,23 +209,20 @@ public class WhitelistManager {
                         offlineUuid
                     )
                 );
+                profile = Optional.of(
+                    new GameProfile(offlineUuid, value, List.of())
+                );
             }
         }
-        if (uuid.isEmpty()) {
-            // Profile may have just been resolved above (Mojang API lookup or offline derivation)
-            uuid = profile.map(GameProfile::getId);
-        }
-        if (profile.isEmpty()) {
-            // Resolves the profile if the UUID belongs to a player who is already online
-            profile = uuid
-                .flatMap(this.server::getPlayer)
-                .map(Player::getGameProfile);
-        }
+
+        final Optional<UUID> uuid = isUuidInput
+            ? inputUuid
+            : profile.map(GameProfile::getId);
 
         // Dispatch to the handler matching the configured identify mode
         return switch (this.config.getIdentifyMode()) {
             case NAME -> {
-                if (inputUuid.isPresent()) {
+                if (isUuidInput) {
                     source.sendPlainMessage(
                         "WARN: Trying to use UUID in NAME mode. Nothing will happen"
                     );
@@ -236,21 +230,19 @@ public class WhitelistManager {
                 }
                 // Prefers the resolved profile's name over the raw input: it's the canonical, case-preserved name checkPlayerName compares against at login, so storing the admin's possibly differently-cased input here would silently break the whitelist/blacklist match.
                 yield handleNameMode.handle(
-                    profile.map(GameProfile::getId).orElse(null),
+                    uuid.orElse(null),
                     profile.map(GameProfile::getName).orElse(value)
                 );
             }
             case UUID -> {
-                if (uuid.isEmpty() && profile.isEmpty()) {
+                if (uuid.isEmpty()) {
                     source.sendPlainMessage(
                         "WARN: Trying to use a player name in UUID mode, and the player is not valid. Nothing will happen"
                     );
                     yield false;
                 }
 
-                UUID playerUuid = uuid.isPresent()
-                    ? uuid.get()
-                    : profile.get().getId();
+                UUID playerUuid = uuid.get();
                 String playerName = profile
                     .map(GameProfile::getName)
                     .orElse(null);
