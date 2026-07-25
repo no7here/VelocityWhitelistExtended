@@ -16,10 +16,12 @@ import me.fallenbreath.velocitywhitelist.WhitelistManager;
 import me.fallenbreath.velocitywhitelist.config.PlayerList;
 import net.kyori.adventure.text.Component;
 
+// Handles the registration and execution of whitelist and blacklist commands
 public class WhitelistCommand
 {
 	private final WhitelistManager manager;
 
+	// Initialises the whitelist command with the given manager
 	public WhitelistCommand(WhitelistManager whitelistManager)
 	{
 		this.manager = whitelistManager;
@@ -60,7 +62,7 @@ public class WhitelistCommand
 		{
 			var alternative = literal(roots[i]).
 					requires(s -> s.hasPermission(PluginMeta.ID + ".command")).
-					// a bare redirect node is not executable in brigadier, so the alias needs its own executes
+					// A bare redirect node is not executable in brigadier so the alias needs its own executes
 					executes(c -> showListStatus(c.getSource(), list)).
 					redirect(rootNode);
 
@@ -68,12 +70,14 @@ public class WhitelistCommand
 		}
 	}
 
+	// Registers both the whitelist and blacklist commands
 	public void register(CommandManager commandManager)
 	{
 		this.registerOne(commandManager, new String[]{"whitelist", "vwhitelist"}, this.manager.getWhitelist());
 		this.registerOne(commandManager, new String[]{"blacklist", "vblacklist"}, this.manager.getBlacklist());
 	}
 
+	// Shows the current status of the list to the command source
 	private int showListStatus(CommandSource source, PlayerList list)
 	{
 		source.sendMessage(Component.text(String.format("%s v%s", PluginMeta.NAME, PluginMeta.VERSION)));
@@ -81,12 +85,14 @@ public class WhitelistCommand
 		return 1;
 	}
 
+	// Shows the detailed status of the list including activation and size
 	protected static void showListStatus(CommandSource source, PlayerList list, String prefix)
 	{
 		source.sendMessage(Component.text(String.format("%sActivated: %s (config enabled: %s, load ok: %s)", prefix, list.isActivated(), list.isConfigEnabled(), list.isLoadOk())));
 		source.sendMessage(Component.text(String.format("%sSize: %d player names, %d player UUIDs", prefix, list.getPlayerNames().size(), list.getPlayerUuidMappingEntries().size())));
 	}
 
+	// Adds a player to the specified list
 	private int addPlayer(CommandSource source, PlayerList list, String playerName)
 	{
 		if (!list.isActivated())
@@ -102,6 +108,7 @@ public class WhitelistCommand
 		return 0;
 	}
 
+	// Removes a player from the specified list
 	private int removePlayer(CommandSource source, PlayerList list, String playerName)
 	{
 		if (!list.isActivated())
@@ -117,6 +124,7 @@ public class WhitelistCommand
 		return 0;
 	}
 
+	// Lists all players in the specified list
 	private int listPlayers(CommandSource source, PlayerList list)
 	{
 		if (!list.isActivated())
@@ -131,6 +139,7 @@ public class WhitelistCommand
 		return players.size();
 	}
 
+	// Reloads the specified list from configuration
 	private int reloadList(CommandSource source, PlayerList list)
 	{
 		if (!list.isConfigEnabled())

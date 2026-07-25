@@ -5,10 +5,7 @@ import java.nio.file.Path;
 
 import org.slf4j.Logger;
 
-/**
- * Common contract for the yaml-file-backed lists (player lists and IP lists),
- * so they can share the same load / save / reload plumbing in the manager
- */
+// Common contract for the yaml-file-backed lists (player lists and IP lists) so they can share the same load, save and reload plumbing in the manager
 public interface YamlStoredList<T extends YamlStoredList<T>>
 {
 	String getName();
@@ -23,12 +20,7 @@ public interface YamlStoredList<T extends YamlStoredList<T>>
 
 	void save() throws IOException;
 
-	/**
-	 * Loudly reports entries that were skipped during a load. Individual malformed entries are
-	 * skipped rather than failing the whole load, so that a single typo in a hand-edited file
-	 * cannot deactivate an entire list on the next proxy restart (for the whitelist, that would
-	 * mean an open server). This summary makes the degradation impossible to miss in the console
-	 */
+	// Loudly reports entries skipped during a load - if individual malformed entries caused whole load to fail, a single typo in a file would cause it to de-activate an entire list on next proxy restart (for whitelist, that would mean an open server)
 	static void logSkippedEntries(Logger logger, String listName, int skippedCount)
 	{
 		if (skippedCount > 0)

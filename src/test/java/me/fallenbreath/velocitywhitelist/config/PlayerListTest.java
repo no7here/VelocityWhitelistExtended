@@ -9,8 +9,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+// Unit tests for the PlayerList class
 class PlayerListTest
 {
+	// Test to ensure getPlayerUuidMappingEntries returns a true snapshot and not a live view into the map
 	@Test
 	void getPlayerUuidMappingEntries_returnsTrueSnapshot_notLiveViewIntoTheMap(@TempDir Path tempDir)
 	{
@@ -18,11 +20,7 @@ class PlayerListTest
 		UUID uuid = UUID.randomUUID();
 		list.putPlayerUUID(uuid, "OldName");
 
-		// "ImmutableList.copyOf(map.entrySet())" only freezes the list container - the Map.Entry
-		// objects inside are still the live nodes backing the HashMap. A repeat put() for the
-		// same key mutates the existing node's value in place rather than allocating a new one,
-		// so an entry handed out earlier (e.g. to a tab-complete/listing command) can silently
-		// change value after the fact.
+		// "ImmutableList.copyOf(map.entrySet())" only freezes list container - Map.Entry objects inside are still live nodes. A repeat put() for same key mutates existing node's value, so an entry handed out earlier can silently change value after the fact.		//
 		Map.Entry<UUID, String> entry = list.getPlayerUuidMappingEntries().get(0);
 		assertEquals("OldName", entry.getValue());
 

@@ -21,8 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+// Test class for verifying name casing behaviour in the WhitelistManager
 class WhitelistManagerNameCaseTest
 {
+	// Test method to verify that adding a player in name mode stores the resolved canonical case
 	@Test
 	void addPlayer_inNameMode_storesResolvedCanonicalCase_notRawAdminInput(@TempDir Path tempDir) throws Exception
 	{
@@ -39,9 +41,7 @@ class WhitelistManagerNameCaseTest
 
 		ProxyServer server = mock(ProxyServer.class);
 		Player onlinePlayer = mock(Player.class);
-		// Velocity's own online-player lookup is case-insensitive, so an admin typing the wrong
-		// case still resolves to the real, canonically-cased profile - the plugin just has to
-		// use it.
+		// Velocity's own online-player lookup is case-insensitive so an admin typing the wrong case still resolves to the real canonically-cased profile which the plugin just has to use
 		GameProfile canonicalProfile = new GameProfile(UUID.randomUUID(), "Steve", List.of());
 		when(onlinePlayer.getGameProfile()).thenReturn(canonicalProfile);
 		when(server.getPlayer("steve")).thenReturn(Optional.of(onlinePlayer));
@@ -53,11 +53,7 @@ class WhitelistManagerNameCaseTest
 		boolean added = manager.addPlayer(source, manager.getWhitelist(), "steve");
 
 		assertTrue(added, "adding the player should succeed");
-		// operatePlayer resolves canonicalProfile.getName() == "Steve" via the online player
-		// lookup, but the NAME-mode switch case in WhitelistManager currently stores the raw
-		// command argument ("steve") instead of that resolved name. A real login's
-		// GameProfile#getName() would be "Steve" (case-sensitive match against checkPlayerName),
-		// so the player who was just "added" would still fail the whitelist check.
+		// NAME-mode stores the raw lowercase command argument instead of the resolved canonical name which causes subsequent case-sensitive logins to fail
 		assertTrue(manager.getWhitelist().checkPlayerName("Steve"),
 				"the whitelist should store the resolved canonical-case name so a real login (profile.getName() == \"Steve\") actually matches");
 	}

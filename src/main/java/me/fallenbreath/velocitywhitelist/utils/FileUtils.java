@@ -12,20 +12,16 @@ import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 
+// Provides utility methods for file operations
 public class FileUtils
 {
-	/**
-	 * A Yaml instance that refuses to instantiate anything beyond plain scalars/lists/maps.
-	 * SnakeYAML's default (no-arg) Yaml()/Constructor() will happily construct an arbitrary Java
-	 * type from a "!!fully.qualified.ClassName" tag (CVE-2022-1471, fixed only in SnakeYAML 2.0);
-	 * this project's own files (config.yml/whitelist.yml/blacklist.yml/ipbans.yml) are exactly the
-	 * kind of hand-edited files that vulnerability targets, so every load goes through this instead
-	 */
+	// Creates a Yaml instance that refuses to instantiate anything beyond plain scalars, lists and maps to avoid vulnerabilities such as CVE-2022-1471
 	public static Yaml newSafeYaml()
 	{
 		return new Yaml(new SafeConstructor(new LoaderOptions()));
 	}
 
+	// Safely writes string content to a file by writing to a temporary file first and then moving it atomically
 	public static void safeWrite(Path path, String content) throws IOException
 	{
 		Path tempPath = path.resolveSibling(path.getFileName().toString() + ".tmp");
@@ -36,12 +32,12 @@ public class FileUtils
 		}
 		catch (AtomicMoveNotSupportedException e)
 		{
-			// The filesystem cannot replace the file atomically; fall back to a plain move.
-			// The worst case is then a torn write on crash, same as before this option was added
+			// If filesystem cannot replace the file atomically, fall back to a plain move
 			Files.move(tempPath, path, StandardCopyOption.REPLACE_EXISTING);
 		}
 	}
 
+	// Dumps an object to a file in YAML format
 	public static void dumpYaml(Path path, Object data) throws IOException
 	{
 		DumperOptions dumperOptions = new DumperOptions();

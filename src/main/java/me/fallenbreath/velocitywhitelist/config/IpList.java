@@ -20,6 +20,7 @@ import com.google.common.net.InetAddresses;
 
 import me.fallenbreath.velocitywhitelist.utils.FileUtils;
 
+// Represents a list of IP addresses stored in a YAML file
 public class IpList implements YamlStoredList<IpList>
 {
 	private final Set<String> ips = Sets.newLinkedHashSet();
@@ -29,6 +30,7 @@ public class IpList implements YamlStoredList<IpList>
 	private boolean loadOk = false;
 	private final Object lock = new Object();
 
+	// Initialises a new IP list with a given name, file path and config supplier
 	public IpList(String name, Path filePath, Supplier<Boolean> configEnableGetter)
 	{
 		this.name = name;
@@ -36,18 +38,21 @@ public class IpList implements YamlStoredList<IpList>
 		this.configEnableGetter = configEnableGetter;
 	}
 
+	// Gets the name of the list
 	@Override
 	public String getName()
 	{
 		return this.name;
 	}
 
+	// Gets the file path of the list
 	@Override
 	public Path getFilePath()
 	{
 		return this.filePath;
 	}
 
+	// Checks if the list was loaded successfully
 	public boolean isLoadOk()
 	{
 		synchronized (this.lock)
@@ -56,16 +61,19 @@ public class IpList implements YamlStoredList<IpList>
 		}
 	}
 
+	// Checks if the list is enabled in the configuration
 	public boolean isConfigEnabled()
 	{
 		return this.configEnableGetter.get();
 	}
 
+	// Checks if the list is both loaded and enabled
 	public boolean isActivated()
 	{
 		return this.isLoadOk() && this.isConfigEnabled();
 	}
 
+	// Gets an immutable copy of the current IPs
 	public ImmutableList<String> getIps()
 	{
 		synchronized (this.lock)
@@ -74,22 +82,18 @@ public class IpList implements YamlStoredList<IpList>
 		}
 	}
 
+	// Strips the scope ID from an IPv6 address if present
 	private static String stripScopeId(String ip)
 	{
 		int pct = ip.indexOf('%');
 		return pct != -1 ? ip.substring(0, pct) : ip;
 	}
 
-	/**
-	 * Strictly parses an IP literal (IPv4 or IPv6, optionally bracketed and/or with a %scope suffix)
-	 * into its canonical textual form, e.g. "2001:DB8::1" -> "2001:db8:0:0:0:0:0:1".
-	 * Returns empty for anything else (hostnames, malformed input), so no DNS lookup can ever happen
-	 */
+	// Strictly parses an IP literal into its canonical textual form and returns empty for anything else so no DNS lookup can ever happen
 	public static Optional<String> normalizeIpLiteral(String ipStr)
 	{
 		String cleanIp = ipStr.trim();
-		// Bracket notation ("[::1]") is how IPv6 addresses appear in URLs and in "[addr]:port"
-		// log lines, so it's worth accepting even though it's not a literal IP by itself
+		// Bracket notation is how IPv6 addresses appear in URLs and log lines so it is worth accepting even though it is not a literal IP by itself
 		if (cleanIp.length() >= 2 && cleanIp.startsWith("[") && cleanIp.endsWith("]"))
 		{
 			cleanIp = cleanIp.substring(1, cleanIp.length() - 1);
@@ -102,6 +106,7 @@ public class IpList implements YamlStoredList<IpList>
 		return Optional.empty();
 	}
 
+	// Checks if a given IP address is in the list
 	public boolean checkIp(String ipStr)
 	{
 		Optional<String> normalized = normalizeIpLiteral(ipStr);
@@ -115,6 +120,7 @@ public class IpList implements YamlStoredList<IpList>
 		}
 	}
 
+	// Adds an IP address to the list
 	public boolean addIp(String ipStr)
 	{
 		Optional<String> normalized = normalizeIpLiteral(ipStr);
@@ -128,6 +134,7 @@ public class IpList implements YamlStoredList<IpList>
 		}
 	}
 
+	// Removes an IP address from the list
 	public boolean removeIp(String ipStr)
 	{
 		Optional<String> normalized = normalizeIpLiteral(ipStr);
@@ -141,6 +148,7 @@ public class IpList implements YamlStoredList<IpList>
 		}
 	}
 
+	// Resets the current list to match a newly loaded list
 	@Override
 	public void resetTo(@NotNull IpList newList)
 	{
@@ -164,22 +172,21 @@ public class IpList implements YamlStoredList<IpList>
 		}
 	}
 
+	// Creates a new empty IP list with the same configuration
 	@Override
 	public IpList createNewEmptyList()
 	{
 		return new IpList(this.name, this.filePath, this.configEnableGetter);
 	}
 
+	// Loads the IP list from the YAML file
 	@Override
 	@SuppressWarnings("unchecked")
 	public void load(Logger logger) throws IOException
 	{
 		String yamlContent = Files.readString(this.filePath);
 
-		// Plain load() + cast rather than loadAs(..., HashMap.class): loadAs asks SafeConstructor to
-		// construct the root via an explicit "!!java.util.HashMap" tag, which isn't on its safe
-		// allowlist (only implicit/core YAML tags like a plain mapping are) and throws. An empty file
-		// parses to null, same as Configuration's config.yml handling.
+		// Use a plain load and cast because an explicit tag would be rejected by the safe constructor and an empty file parses to null
 		Map<String, Object> options = (Map<String, Object>)FileUtils.newSafeYaml().load(yamlContent);
 
 		synchronized (this.lock)
@@ -190,8 +197,7 @@ public class IpList implements YamlStoredList<IpList>
 			Object ipsVal = options != null ? options.get("ips") : null;
 			if (ipsVal != null)
 			{
-				// A present but non-list value means the file is structurally corrupt. Fail the whole load
-				// so a reload keeps the previous state, instead of silently replacing the list with an empty one
+				// A present but non-list value means the file is structurally corrupt so fail the whole load
 				if (!(ipsVal instanceof List<?> list))
 				{
 					throw new IOException("The 'ips' field in the config is malformed (not a YAML list)");
@@ -223,6 +229,7 @@ public class IpList implements YamlStoredList<IpList>
 		}
 	}
 
+	// Saves the current IP list to the YAML file
 	@Override
 	public void save() throws IOException
 	{

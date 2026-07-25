@@ -28,6 +28,7 @@ import me.fallenbreath.velocitywhitelist.utils.UuidUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
+// Manages the whitelist, blacklist and IP ban lists for the proxy
 public class WhitelistManager
 {
 	private final Logger logger;
@@ -171,25 +172,30 @@ public class WhitelistManager
 			UuidHandler handleUuidMode
 	)
 	{
+		// UUID: read directly from the input value, if it parses as one
 		final Optional<UUID> inputUuid = UuidUtils.tryParseUuid(value);
 
 		Optional<UUID> uuid = inputUuid;
-		Optional<GameProfile> profile = this.server.getPlayer(value).map(Player::getGameProfile);  // get online player by name
+		// profile: the matching online player, if any, looked up by input value (name or UUID)
+		Optional<GameProfile> profile = this.server.getPlayer(value).map(Player::getGameProfile);
 
 		if (uuid.isEmpty())
 		{
+			// UUID wasn't given directly: fall back to the online player's UUID, if found above
 			uuid = profile.map(GameProfile::getId);
 		}
-		if (uuid.isEmpty() && profile.isEmpty())  // NAME mode needs this too now, to get a canonical-case name for offline targets
+		// Also needed in NAME mode to resolve a canonical-case name for offline targets
+		if (uuid.isEmpty() && profile.isEmpty())
 		{
-			// uuid == null && profile == null  -> input is name, player not online
 			if (this.server.getConfiguration().isOnlineMode())
 			{
+				// Input is a name and the player isn't online: look it up via the Mojang API
 				profile = MojangAPI.queryPlayerByName(this.logger, this.server, value)
 						.map(r -> new GameProfile(r.uuid(), r.playerName(), List.of()));
 			}
 			else
 			{
+				// Proxy is offline-mode: derive the same UUID the server itself would assign
 				UUID offlineUuid = UuidUtils.getOfflinePlayerUuid(value);
 				profile = Optional.of(new GameProfile(offlineUuid, value, List.of()));
 				source.sendPlainMessage(String.format("Inferred offline uuid from player name %s: %s", value, offlineUuid));
@@ -197,16 +203,16 @@ public class WhitelistManager
 		}
 		if (uuid.isEmpty())
 		{
+			// Profile may have just been resolved above (Mojang API lookup or offline derivation)
 			uuid = profile.map(GameProfile::getId);
 		}
 		if (profile.isEmpty())
 		{
+			// Resolves the profile if the UUID belongs to a player who is already online
 			profile = uuid.flatMap(this.server::getPlayer).map(Player::getGameProfile);
 		}
 
-		// uuid: get from value directly, or mojang api (looked up by input value)
-		// profile: get from server online player, looked up by input value (name / uuid)
-
+		// Dispatch to the handler matching the configured identify mode
 		return switch (this.config.getIdentifyMode())
 		{
 			case NAME -> {
@@ -215,10 +221,7 @@ public class WhitelistManager
 					source.sendPlainMessage("WARN: Trying to use UUID in NAME mode. Nothing will happen");
 					yield false;
 				}
-				// Prefer the resolved profile's name (from the online player or the Mojang API lookup
-				// above) over the raw command argument: it's the canonical case-preserved name that
-				// checkPlayerName will actually be compared against at login, so storing the admin's
-				// possibly differently-cased input here would silently break the whitelist/blacklist match.
+				// Prefers the resolved profile's name over the raw input: it's the canonical, case-preserved name checkPlayerName compares against at login, so storing the admin's possibly differently-cased input here would silently break the whitelist/blacklist match.
 				yield handleNameMode.handle(profile.map(GameProfile::getId).orElse(null), profile.map(GameProfile::getName).orElse(value));
 			}
 
@@ -236,18 +239,13 @@ public class WhitelistManager
 		};
 	}
 
-	/**
-	 * Saves the given list after a mutation. If the save fails, undoes the mutation via
-	 * {@code rollback} and runs {@code onFailure} (a command-source message, or a silent
-	 * no-op for background callers like the auto-blacklist), so a failed save never leaves
-	 * the in-memory list out of sync with what's actually on disk.
-	 */
 	private boolean saveOrRollback(YamlStoredList<?> list, Runnable rollback, Runnable onFailure)
 	{
 		if (this.saveList(list))
 		{
 			return true;
 		}
+		// Save failed: undo the mutation via `rollback`, then run `onFailure` (a command-source message, or a silent no-op for background callers like the auto-blacklist), so a failed save never leaves the in-memory list out of sync with disk
 		rollback.run();
 		onFailure.run();
 		return false;
@@ -268,7 +266,8 @@ public class WhitelistManager
 						if (added && !this.saveOrRollback(list, () -> list.removePlayerName(playerName), () ->
 								source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())))))
 						{
-							return false;  // the action was not applied, so no blacklist kick either
+							// Skips the blacklist kick since the change was not saved
+							return false;
 						}
 					}
 
@@ -306,7 +305,8 @@ public class WhitelistManager
 							if (!this.saveOrRollback(list, () -> this.rollbackUuidEntry(list, uuid, oldEntry), () ->
 									source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())))))
 							{
-								return false;  // the action was not applied, so no blacklist kick either
+							    // Skips the blacklist kick since the change was not saved
+								return false;
 							}
 						}
 					}
@@ -337,6 +337,7 @@ public class WhitelistManager
 		);
 	}
 
+	// Removes a player from the specified list
 	public boolean removePlayer(CommandSource source, PlayerList list, String value)
 	{
 		return this.operatePlayer(
@@ -382,9 +383,7 @@ public class WhitelistManager
 		);
 	}
 
-	/**
-	 * Restores a uuid mapping to the given previous state, for undoing a mutation whose save failed
-	 */
+	// Restores a UUID mapping to its previous state for undoing failed mutations
 	private void rollbackUuidEntry(PlayerList list, UUID uuid, PlayerList.UuidEntry oldEntry)
 	{
 		if (oldEntry.exists())
@@ -397,6 +396,7 @@ public class WhitelistManager
 		}
 	}
 
+	// Disconnects an online player who has been added to the blacklist
 	private void handlePlayerAddedToBlacklist(Player player)
 	{
 		var profile = player.getGameProfile();
@@ -405,6 +405,7 @@ public class WhitelistManager
 		player.disconnect(message);
 	}
 
+	// Kicks all connected players whose IP address matches an entry in the ban list
 	public void kickIpBannedPlayers()
 	{
 		if (!this.ipBanList.isActivated())
@@ -417,7 +418,8 @@ public class WhitelistManager
 		for (Player player : this.server.getAllPlayers())
 		{
 			InetSocketAddress address = player.getRemoteAddress();
-			if (address != null && address.getAddress() != null)  // getAddress() is null for unresolved socket addresses
+			// getAddress() returns null for unresolved socket addresses
+			if (address != null && address.getAddress() != null)
 			{
 				String ipString = address.getAddress().getHostAddress();
 				if (this.ipBanList.checkIp(ipString))
@@ -429,9 +431,7 @@ public class WhitelistManager
 		}
 	}
 
-	/**
-	 * Adds an IP to the ban list and saves it, mirroring addPlayer()'s mutate/save/rollback shape
-	 */
+	// Adds an IP to the ban list and saves it, matching addPlayer()'s mutate/save/rollback shape
 	public boolean addIp(CommandSource source, String ip)
 	{
 		synchronized (this.ipBanLock)
@@ -452,9 +452,7 @@ public class WhitelistManager
 		return false;
 	}
 
-	/**
-	 * Removes an IP from the ban list and saves it, mirroring removePlayer()'s mutate/save/rollback shape
-	 */
+	// Removes an IP from the ban list and saves it, matching removePlayer()'s mutate/save/rollback shape
 	public boolean removeIp(CommandSource source, String ip)
 	{
 		synchronized (this.ipBanLock)
@@ -474,14 +472,15 @@ public class WhitelistManager
 		return false;
 	}
 
+	// Evaluates incoming connections against the IP ban list, blacklist and whitelist (in that order)
 	public void onPlayerLogin(LoginEvent event)
 	{
 		Player player = event.getPlayer();
 		GameProfile profile = player.getGameProfile();
 		InetSocketAddress remoteAddress = player.getRemoteAddress();
 
-		// 1. Evaluate IP ban list FIRST
-		if (this.ipBanList.isActivated() && remoteAddress != null && remoteAddress.getAddress() != null)  // getAddress() is null for unresolved socket addresses
+		// getAddress() returns null for unresolved socket addresses
+		if (this.ipBanList.isActivated() && remoteAddress != null && remoteAddress.getAddress() != null)
 		{
 			String ipString = remoteAddress.getAddress().getHostAddress();
 			if (this.ipBanList.checkIp(ipString))
@@ -495,7 +494,6 @@ public class WhitelistManager
 			}
 		}
 
-		// 2. Evaluate blacklist SECOND
 		if (this.blacklist.isActivated() && this.isPlayerInBlacklist(profile))
 		{
 			Component message = MiniMessage.miniMessage().deserialize(this.config.getBlacklistKickMessage());
@@ -505,7 +503,6 @@ public class WhitelistManager
 			return;
 		}
 
-		// 3. Evaluate whitelist THIRD
 		if (this.whitelist.isActivated() && !this.isPlayerInWhitelist(profile))
 		{
 			Component message = MiniMessage.miniMessage().deserialize(this.config.getWhitelistKickMessage());
@@ -515,15 +512,10 @@ public class WhitelistManager
 		}
 	}
 
-	/**
-	 * Automatically adds the given profile to the blacklist, in response to a join attempt from a banned IP.
-	 * Does nothing if the blacklist_on_ipban_join option is disabled - including when its uuid identify mode /
-	 * online mode requirements aren't met, see {@link Configuration#isBlacklistOnIpBanJoin()} - if the blacklist
-	 * failed to load, if the profile is already blacklisted with an up-to-date name, or if the rate limit quota
-	 * is exhausted
-	 */
+	// Automatically adds the profile to the blacklist if it joined from a banned IP
 	private void autoBlacklistOnBannedIpJoin(GameProfile profile)
 	{
+		// Does nothing if blacklist_on_ipban_join is disabled or its UUID / online mode requirements aren't met (see Configuration#isBlacklistOnIpBanJoin()) or if blacklist failed to load
 		if (!this.config.isBlacklistOnIpBanJoin() || !this.blacklist.isLoadOk())
 		{
 			return;
@@ -531,11 +523,12 @@ public class WhitelistManager
 
 		synchronized (this.saveLock)
 		{
+			// Nothing to do if already blacklisted with an up-to-date name
 			if (!this.blacklistEntryNeedsUpdate(profile))
 			{
 				return;
 			}
-			// Rate limit quota is checked and consumed ONLY when a write is actually needed
+			// Quota is only consumed when a write is actually needed
 			if (!this.tryAcquireAutoBlacklistQuota())
 			{
 				return;
@@ -544,22 +537,16 @@ public class WhitelistManager
 		}
 	}
 
-	/**
-	 * Whether auto-blacklisting this profile requires a blacklist write: the entry is missing,
-	 * or its stored player name is outdated. Auto-blacklist only ever runs in uuid identify mode
-	 * (see {@link Configuration#isBlacklistOnIpBanJoin()}), so only that lookup is needed here.
-	 * Must be called while holding {@link #saveLock}
-	 */
+	// Must be called while holding saveLock
 	private boolean blacklistEntryNeedsUpdate(GameProfile profile)
 	{
+		// Auto-blacklist only ever runs in UUID identify mode (see Configuration#isBlacklistOnIpBanJoin()), so only a UUID lookup is needed here
 		PlayerList.UuidEntry entry = this.blacklist.peekPlayerUUID(profile.getId());
+		// Needs a write if the entry is missing entirely, or if its stored name is stale
 		return !entry.exists() || (profile.getName() != null && !profile.getName().equals(entry.name()));
 	}
 
-	/**
-	 * Consumes one unit of the auto-blacklist rate limit quota if available.
-	 * Must be called while holding {@link #saveLock}
-	 */
+	// Consumes one unit of the auto-blacklist rate limit quota if available. Must be called while holding the save lock.
 	private boolean tryAcquireAutoBlacklistQuota()
 	{
 		long now = System.currentTimeMillis();
@@ -581,9 +568,7 @@ public class WhitelistManager
 		return false;
 	}
 
-	/**
-	 * Must be called while holding {@link #saveLock}
-	 */
+	// Writes a profile to the blacklist automatically. Must be called while holding the save lock.
 	private void autoBlacklistByUuid(GameProfile profile)
 	{
 		PlayerList.UuidEntry oldEntry = this.blacklist.peekPlayerUUID(profile.getId());
@@ -612,7 +597,8 @@ public class WhitelistManager
 				destList.resetTo(newList);
 				return true;
 			}
-			catch (Exception e) // Catch generic Exception to handle SnakeYAML runtime YAMLException and parsing failures
+			// The YAML library can throw its own exception types on a bad file
+			catch (Exception e)
 			{
 				String msg = String.format("Failed to load the %s, the plugin might not work correctly!", newList.getName());
 				this.logger.error(msg, e);

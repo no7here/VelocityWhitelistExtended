@@ -22,6 +22,7 @@ import me.fallenbreath.velocitywhitelist.command.PluginControlCommand;
 import me.fallenbreath.velocitywhitelist.command.WhitelistCommand;
 import me.fallenbreath.velocitywhitelist.config.Configuration;
 
+// Represents the main plugin class for VelocityWhitelistExtended
 @Plugin(
 		id = PluginMeta.ID, name = PluginMeta.NAME, version = PluginMeta.VERSION,
 		url = PluginMeta.REPOSITORY_URL,
@@ -37,6 +38,7 @@ public class VelocityWhitelistPlugin
 	private final Configuration config;
 	private final WhitelistManager whitelistManager;
 
+	// Initialises the plugin with injected dependencies
 	@Inject
 	public VelocityWhitelistPlugin(ProxyServer server, Logger logger, @DataDirectory Path dataDirectory)
 	{
@@ -48,6 +50,7 @@ public class VelocityWhitelistPlugin
 		this.whitelistManager = new WhitelistManager(logger, this.config, this.dataDirectory, this.server);
 	}
 
+	// Handles the proxy initialisation event
 	@Subscribe
 	public void onProxyInitialization(ProxyInitializeEvent event)
 	{
@@ -57,7 +60,6 @@ public class VelocityWhitelistPlugin
 			return;
 		}
 
-		// now the config dir definitely exists
 		this.whitelistManager.loadLists();
 
 		this.server.getEventManager().register(this, LoginEvent.class, this.whitelistManager::onPlayerLogin);
@@ -66,6 +68,7 @@ public class VelocityWhitelistPlugin
 		new PluginControlCommand(this.logger, this.config, this.whitelistManager).register(this.server.getCommandManager());
 	}
 
+	// Prepares the plugin configuration and data directory
 	private boolean prepareConfig()
 	{
 		if (!this.dataDirectory.toFile().exists() && !this.dataDirectory.toFile().mkdirs())
