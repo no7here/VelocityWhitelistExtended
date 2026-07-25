@@ -115,9 +115,7 @@ public class Configuration
 		return this.getBooleanOption("ipban_enabled");
 	}
 
-	// Invalid values are warned about once per load in ConfigWarnings rather than here as this getter is called on every single login so it must stay a pure read with no logging side effects
-
-	// Reads a boolean config option defaulting to false if it is absent or not actually a boolean value
+	// Invalid values are warned about once per load in ConfigWarnings, not here as this getter is called on every login, so it must stay a pure read with no logging side effects
 	private boolean getBooleanOption(String key)
 	{
 		Object value = this.snapshot.options.get(key);

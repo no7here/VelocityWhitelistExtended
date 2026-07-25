@@ -117,7 +117,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 	{
 		synchronized (this.lock)
 		{
-			// Snapshot each entry's value rather than copying the live Map.Entry objects as a repeat putPlayerUUID() for the same key mutates the existing HashMap node's value in place so a plain ImmutableList.copyOf(entrySet()) would still let a previously-returned entry's value change after the fact, Maps.immutableEntry tolerates a null value which a bare-uuid entry legitimately has
+			// Snapshot each entry's value rather than copying the live Map.Entry objects as a repeat putPlayerUUID() for the same key mutates the existing HashMap node's value in place so a plain ImmutableList.copyOf(entrySet()) would still let a previously-returned entry's value change after the fact, Maps.immutableEntry tolerates a null value which a bare-UUID entry legitimately has
 			return this.uuids.entrySet().stream()
 					.map(e -> Maps.<UUID, String>immutableEntry(e.getKey(), e.getValue()))
 					.collect(ImmutableList.toImmutableList());
@@ -133,7 +133,7 @@ public class PlayerList implements YamlStoredList<PlayerList>
 		}
 	}
 
-	// A snapshot of one uuid mapping where exists is needed alongside the name since a stored uuid may legally map to a null name
+	// A snapshot of one UUID mapping where exists is needed alongside the name since a stored UUID may legally map to a null name
 	public record UuidEntry(boolean exists, @Nullable String name)
 	{
 	}

@@ -26,11 +26,12 @@ public interface YamlStoredList<T extends YamlStoredList<T>>
 	// Saves the list to the backing file
 	void save() throws IOException;
 
-	// Loudly reports entries that were skipped during a load, as individual malformed entries are skipped rather than failing the whole load (for the whitelist that would mean an open server)
+	// Loudly reports entries that were skipped during a load - if it failed the whole load, a single typo in a hand-edited file would deactivate an entire list on the next proxy restart (for whitelist, that would mean an open server)
 	static void logSkippedEntries(Logger logger, String listName, int skippedCount)
 	{
 		if (skippedCount > 0)
 		{
+		    // Print a loud message in the console
 			logger.error("{}: {} invalid entries were skipped and are NOT being enforced! Fix the file and reload it", listName, skippedCount);
 		}
 	}

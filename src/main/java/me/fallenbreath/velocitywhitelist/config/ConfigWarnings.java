@@ -60,8 +60,7 @@ final class ConfigWarnings
 		return this.proxyOnlineModeGetter.get();
 	}
 
-	// Warns once per load/reload about any boolean option that's present but not actually a Boolean
-	// This must be called once from load()/reload() rather than from the getters themselves so a warning doesn't repeat on every connection
+	// Warns once per load/reload about any boolean option that's present but not actually a Boolean. This must be called once from load()/reload() rather than from the getters themselves so a warning doesn't repeat on every connection.
 	void warnAboutInvalidBooleanOptions(Map<String, Object> options)
 	{
 		for (String key : List.of("whitelist_enabled", "blacklist_enabled", "ipban_enabled", "blacklist_on_ipban_join"))

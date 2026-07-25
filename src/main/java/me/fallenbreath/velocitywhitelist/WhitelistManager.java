@@ -50,7 +50,6 @@ public class WhitelistManager
 	private long lastSkipWarningLogTime = 0;
 	private static final long SKIP_WARNING_LOG_COOLDOWN_MS = 5000;
 
-	// Initialises the whitelist manager with required dependencies
 	public WhitelistManager(Logger logger, Configuration config, Path dataDirectory, ProxyServer server)
 	{
 		this.logger = logger;
@@ -61,43 +60,36 @@ public class WhitelistManager
 		this.server = server;
 	}
 
-	// Retrieves the configuration
 	public Configuration getConfig()
 	{
 		return this.config;
 	}
 
-	// Retrieves the proxy server instance
 	public ProxyServer getServer()
 	{
 		return this.server;
 	}
 
-	// Retrieves the whitelist
 	public PlayerList getWhitelist()
 	{
 		return this.whitelist;
 	}
 
-	// Retrieves the blacklist
 	public PlayerList getBlacklist()
 	{
 		return this.blacklist;
 	}
 
-	// Retrieves the IP ban list
 	public IpList getIpBanList()
 	{
 		return this.ipBanList;
 	}
 
-	// Retrieves the lock object for IP ban operations
 	public Object getIpBanLock()
 	{
 		return this.ipBanLock;
 	}
 
-	// Loads all lists from disk and returns true if all loaded successfully
 	public boolean loadLists()
 	{
 		boolean ok1 = this.loadOneList(this.whitelist);
@@ -106,7 +98,6 @@ public class WhitelistManager
 		return ok1 && ok2 && ok3;
 	}
 
-	// Checks if a player profile is present in a specific list based on the configured identification mode
 	private boolean isPlayerInList(GameProfile profile, PlayerList list)
 	{
 		return switch (this.config.getIdentifyMode())
@@ -116,25 +107,21 @@ public class WhitelistManager
 		};
 	}
 
-	// Checks if a player is in the whitelist
 	public boolean isPlayerInWhitelist(GameProfile profile)
 	{
 		return this.isPlayerInList(profile, this.whitelist);
 	}
 
-	// Checks if a player is in the blacklist
 	public boolean isPlayerInBlacklist(GameProfile profile)
 	{
 		return this.isPlayerInList(profile, this.blacklist);
 	}
 
-	// Formats a UUID and optional name into a readable string
 	private static String pretty(@NotNull UUID uuid, @Nullable String name)
 	{
 		return name != null ? String.format("%s (%s)", name, uuid) : uuid.toString();
 	}
 
-	// Retrieves a list of values to suggest for removal from a player list
 	public List<String> getValuesForRemovalSuggestion(PlayerList list)
 	{
 		return switch (this.config.getIdentifyMode())
@@ -156,7 +143,6 @@ public class WhitelistManager
 		};
 	}
 
-	// Retrieves a list of formatted values for displaying a player list
 	public List<String> getValuesForListing(PlayerList list)
 	{
 		return switch (this.config.getIdentifyMode())
@@ -168,19 +154,16 @@ public class WhitelistManager
 		};
 	}
 
-	// Functional interface for handling operations in name mode
 	private interface NameModeHandler
 	{
 		boolean handle(@Nullable UUID uuid, @NotNull String playerName);
 	}
 
-	// Functional interface for handling operations in UUID mode
 	private interface UuidHandler
 	{
 		boolean handle(@NotNull UUID uuid, @Nullable String playerName, @NotNull String displayName);
 	}
 
-	// Executes a player operation by resolving the player profile and delegating to the appropriate handler
 	@SuppressWarnings("EnhancedSwitchMigration")
 	private boolean operatePlayer(
 			CommandSource source,
@@ -189,13 +172,16 @@ public class WhitelistManager
 			UuidHandler handleUuidMode
 	)
 	{
+		// UUID: read directly from the input value, if it parses as one
 		final Optional<UUID> inputUuid = UuidUtils.tryParseUuid(value);
 
 		Optional<UUID> uuid = inputUuid;
+		// profile: the matching online player, if any, looked up by input value (name or UUID)
 		Optional<GameProfile> profile = this.server.getPlayer(value).map(Player::getGameProfile);
 
 		if (uuid.isEmpty())
 		{
+			// UUID wasn't given directly: fall back to the online player's UUID, if found above
 			uuid = profile.map(GameProfile::getId);
 		}
 		// Also needed in NAME mode to resolve a canonical-case name for offline targets
@@ -203,11 +189,13 @@ public class WhitelistManager
 		{
 			if (this.server.getConfiguration().isOnlineMode())
 			{
+				// Input is a name and the player isn't online: look it up via the Mojang API
 				profile = MojangAPI.queryPlayerByName(this.logger, this.server, value)
 						.map(r -> new GameProfile(r.uuid(), r.playerName(), List.of()));
 			}
 			else
 			{
+				// Proxy is offline-mode: derive the same UUID the server itself would assign
 				UUID offlineUuid = UuidUtils.getOfflinePlayerUuid(value);
 				profile = Optional.of(new GameProfile(offlineUuid, value, List.of()));
 				source.sendPlainMessage(String.format("Inferred offline uuid from player name %s: %s", value, offlineUuid));
@@ -215,15 +203,16 @@ public class WhitelistManager
 		}
 		if (uuid.isEmpty())
 		{
-		    // Profile may have just been resolved above
+			// Profile may have just been resolved above (Mojang API lookup or offline derivation)
 			uuid = profile.map(GameProfile::getId);
 		}
 		if (profile.isEmpty())
 		{
-		    // Resolves the profile if the uuid belongs to a player who is already online
+			// Resolves the profile if the UUID belongs to a player who is already online
 			profile = uuid.flatMap(this.server::getPlayer).map(Player::getGameProfile);
 		}
 
+		// Dispatch to the handler matching the configured identify mode
 		return switch (this.config.getIdentifyMode())
 		{
 			case NAME -> {
@@ -232,7 +221,7 @@ public class WhitelistManager
 					source.sendPlainMessage("WARN: Trying to use UUID in NAME mode. Nothing will happen");
 					yield false;
 				}
-				// Uses the resolved name rather than raw input since checkPlayerName compares it at login
+				// Prefers the resolved profile's name over the raw input: it's the canonical, case-preserved name checkPlayerName compares against at login, so storing the admin's possibly differently-cased input here would silently break the whitelist/blacklist match.
 				yield handleNameMode.handle(profile.map(GameProfile::getId).orElse(null), profile.map(GameProfile::getName).orElse(value));
 			}
 
@@ -250,19 +239,18 @@ public class WhitelistManager
 		};
 	}
 
-	// Saves the list to disk or rolls back the mutation and runs a failure callback if saving fails ensuring the in-memory list is never out of sync with disk state
 	private boolean saveOrRollback(YamlStoredList<?> list, Runnable rollback, Runnable onFailure)
 	{
 		if (this.saveList(list))
 		{
 			return true;
 		}
+		// Save failed: undo the mutation via `rollback`, then run `onFailure` (a command-source message, or a silent no-op for background callers like the auto-blacklist), so a failed save never leaves the in-memory list out of sync with disk
 		rollback.run();
 		onFailure.run();
 		return false;
 	}
 
-	// Adds a player to the specified list
 	public boolean addPlayer(CommandSource source, PlayerList list, String value)
 	{
 		boolean isBlacklist = list == this.getBlacklist();
@@ -271,13 +259,14 @@ public class WhitelistManager
 				(uuid, playerName) -> {
 					boolean added;
 
+					// Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
 					synchronized (this.saveLock)
 					{
 						added = list.addPlayerName(playerName);
 						if (added && !this.saveOrRollback(list, () -> list.removePlayerName(playerName), () ->
 								source.sendMessage(Component.text(String.format("Failed to save the %s to disk. Action was not applied.", list.getName())))))
 						{
-						    // Skips the blacklist kick since the change was not saved
+							// Skips the blacklist kick since the change was not saved
 							return false;
 						}
 					}
@@ -291,6 +280,7 @@ public class WhitelistManager
 						source.sendMessage(Component.text(String.format("Player %s is already in the %s", playerName, list.getName())));
 					}
 
+					// Kick only once the blacklist state is confirmed: freshly added and saved, or already listed
 					if (isBlacklist)
 					{
 						this.server.getPlayer(playerName).ifPresent(this::handlePlayerAddedToBlacklist);
@@ -302,6 +292,7 @@ public class WhitelistManager
 					boolean nameChanged;
 					PlayerList.UuidEntry oldEntry;
 
+					// Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
 					synchronized (this.saveLock)
 					{
 						oldEntry = list.peekPlayerUUID(uuid);
@@ -336,6 +327,7 @@ public class WhitelistManager
 						source.sendMessage(Component.text(String.format("Player %s is already in the %s", displayName, list.getName())));
 					}
 
+					// Kick only once the blacklist state is confirmed: freshly added and saved, or already listed
 					if (isBlacklist)
 					{
 						this.server.getPlayer(uuid).ifPresent(this::handlePlayerAddedToBlacklist);
@@ -351,6 +343,7 @@ public class WhitelistManager
 		return this.operatePlayer(
 				source, value,
 				(uuid, playerName) -> {
+					// Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
 					synchronized (this.saveLock)
 					{
 						if (list.removePlayerName(playerName))
@@ -368,6 +361,7 @@ public class WhitelistManager
 					return false;
 				},
 				(uuid, playerName, displayName) -> {
+					// Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
 					synchronized (this.saveLock)
 					{
 						PlayerList.UuidEntry oldEntry = list.peekPlayerUUID(uuid);
@@ -437,7 +431,7 @@ public class WhitelistManager
 		}
 	}
 
-	// Adds an IP to the ban list and saves it
+	// Adds an IP to the ban list and saves it, matching addPlayer()'s mutate/save/rollback shape
 	public boolean addIp(CommandSource source, String ip)
 	{
 		synchronized (this.ipBanLock)
@@ -458,7 +452,7 @@ public class WhitelistManager
 		return false;
 	}
 
-	// Removes an IP from the ban list and saves it
+	// Removes an IP from the ban list and saves it, matching removePlayer()'s mutate/save/rollback shape
 	public boolean removeIp(CommandSource source, String ip)
 	{
 		synchronized (this.ipBanLock)
@@ -518,9 +512,10 @@ public class WhitelistManager
 		}
 	}
 
-	// Automatically adds the profile to the blacklist if they join from a banned IP (only when blacklist_on_ipban_join is enabled & working or rate limit isn't exhausted)
+	// Automatically adds the profile to the blacklist if it joined from a banned IP
 	private void autoBlacklistOnBannedIpJoin(GameProfile profile)
 	{
+		// Does nothing if blacklist_on_ipban_join is disabled or its UUID / online mode requirements aren't met (see Configuration#isBlacklistOnIpBanJoin()) or if blacklist failed to load
 		if (!this.config.isBlacklistOnIpBanJoin() || !this.blacklist.isLoadOk())
 		{
 			return;
@@ -528,6 +523,7 @@ public class WhitelistManager
 
 		synchronized (this.saveLock)
 		{
+			// Nothing to do if already blacklisted with an up-to-date name
 			if (!this.blacklistEntryNeedsUpdate(profile))
 			{
 				return;
@@ -541,10 +537,12 @@ public class WhitelistManager
 		}
 	}
 
-	// Determines if auto-blacklisting this profile requires a blacklist write. Must be called while holding the save lock.
+	// Must be called while holding saveLock
 	private boolean blacklistEntryNeedsUpdate(GameProfile profile)
 	{
+		// Auto-blacklist only ever runs in UUID identify mode (see Configuration#isBlacklistOnIpBanJoin()), so only a UUID lookup is needed here
 		PlayerList.UuidEntry entry = this.blacklist.peekPlayerUUID(profile.getId());
+		// Needs a write if the entry is missing entirely, or if its stored name is stale
 		return !entry.exists() || (profile.getName() != null && !profile.getName().equals(entry.name()));
 	}
 
@@ -581,7 +579,6 @@ public class WhitelistManager
 		}
 	}
 
-	// Loads a specific yaml stored list safely from disk
 	private <T extends YamlStoredList<T>> boolean loadListImpl(T destList, Object lock)
 	{
 		// Acquire transaction lock during reload to prevent concurrent modification or overwrite conflicts
@@ -610,19 +607,16 @@ public class WhitelistManager
 		}
 	}
 
-	// Loads a player list from disk
 	public boolean loadOneList(PlayerList destList)
 	{
 		return this.loadListImpl(destList, this.saveLock);
 	}
 
-	// Loads an IP ban list from disk
 	public boolean loadIpList(IpList destList)
 	{
 		return this.loadListImpl(destList, this.ipBanLock);
 	}
 
-	// Saves a generic yaml stored list to disk
 	public boolean saveList(YamlStoredList<?> list)
 	{
 		try

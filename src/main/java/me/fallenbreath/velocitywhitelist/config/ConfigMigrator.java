@@ -72,8 +72,7 @@ final class ConfigMigrator
 		this.logger.warn("Migrating config file from {} to v{}", version == 0 ? "a legacy version" : "v" + version, CONFIG_VERSION);
 		this.logger.warn("Please read the documentation for more information: {}", PluginMeta.REPOSITORY_URL);
 
-		// Configs from before the uuid default switch behaved as name mode when identify_mode was absent so "name" must stay the fallback here or migration would silently stop name-based lists from matching
-		// UUID is the default for newly generated configs only
+		// Configs from before the UUID default switch behaved as name mode when identify_mode was absent so "name" must stay the fallback here or migration would silently stop name-based lists from matching. UUID is the default for newly generated configs only.
 		Map<String, Object> newOptions = Maps.newLinkedHashMap();
 		newOptions.put("version", CONFIG_VERSION);
 		newOptions.put("identify_mode", option(options, "identify_mode", "name"));

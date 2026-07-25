@@ -1,8 +1,8 @@
 package me.fallenbreath.velocitywhitelist;
 
-// Contains static metadata for the plugin
 public class PluginMeta
 {
+    // ID unchanged from original repo this is a fork of to prevent conflicts
 	public static final String ID = "velocitywhitelist";
 	public static final String NAME = "VelocityWhitelistExtended";
 	public static final String VERSION = "0.4.1";
