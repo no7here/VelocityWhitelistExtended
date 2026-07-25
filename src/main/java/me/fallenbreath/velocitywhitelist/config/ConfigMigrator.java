@@ -32,7 +32,7 @@ final class ConfigMigrator
 		return value != null ? value : defaultValue;
 	}
 
-	// Parses a config version value that should be a YAML Number but also accepts a hand-quoted numeric string so an already-current config doesn't get misdetected as legacy and needlessly re-migrated on every load
+	// Parses a config version value that should be a YAML Number but also accepts a hand-quoted numeric string (e.g. `version: "2"`) so an already-current config doesn't get misdetected as legacy and needlessly re-migrated on every load
 	private static int parseVersion(Object versionObj)
 	{
 		if (versionObj instanceof Number number)

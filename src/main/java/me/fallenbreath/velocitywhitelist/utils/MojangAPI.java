@@ -23,10 +23,9 @@ import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import com.velocitypowered.api.proxy.ProxyServer;
 
-// API wrapper for Mojang services
 public class MojangAPI
 {
-	// Represents the response object from the Mojang API based on https://wiki.vg/Mojang_API#Username_to_UUID
+	// https://minecraft.wiki/w/Mojang_API#Query_player's_UUID
 	private static class ResponseObject
 	{
 		public String name;
@@ -34,12 +33,10 @@ public class MojangAPI
 		public String errorMessage;
 	}
 
-	// Represents a cached query entry for a player name
 	private record QueryCacheEntry(String queryName, @Nullable QueryResult result, long expireAtMs)
 	{
 	}
 
-	// Represents the result of a successful query containing the UUID and player name
 	public record QueryResult(UUID uuid, String playerName)
 	{
 	}
@@ -51,7 +48,6 @@ public class MojangAPI
 	private static final List<QueryCacheEntry> queryCache = Lists.newLinkedList();
 	private static volatile HttpClient cachedClient;
 
-	// Queries a player by their name
 	public static Optional<QueryResult> queryPlayerByName(Logger logger, ProxyServer server, String name)
 	{
 		// Mojang's name lookup is case-insensitive so the cache is keyed on the lowercased name to avoid a needless duplicate API call or entry for "Steve" vs "steve"
@@ -143,7 +139,6 @@ public class MojangAPI
 		return client;
 	}
 
-	// Creates a new HTTP client instance
 	private static HttpClient createHttpClient(ProxyServer server)
 	{
 		try
@@ -163,7 +158,7 @@ public class MojangAPI
 		}
 		catch (ReflectiveOperationException | RuntimeException ignored)
 		{
-		    // Optional optimisation only, so any failure here just falls back to a plain client
+			// Optional optimisation only, so any failure here just falls back to a plain client
 		}
 		return HttpClient.newBuilder().build();
 	}
