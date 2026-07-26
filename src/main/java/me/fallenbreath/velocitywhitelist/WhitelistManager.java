@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Consumer;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -256,9 +257,9 @@ public class WhitelistManager {
     public boolean addPlayer(
         CommandSource source,
         PlayerList list,
-        String value
+        String value,
+        Consumer<Player> postAddHook
     ) {
-        boolean isBlacklist = list == this.getBlacklist();
         Optional<ResolvedIdentity> targetOpt = this.resolveTarget(source, value);
         if (targetOpt.isEmpty()) {
             return false;
@@ -316,10 +317,10 @@ public class WhitelistManager {
                 }
 
                 // Kick only once the blacklist state is confirmed: freshly added and saved, or already listed
-                if (isBlacklist) {
+                if (postAddHook != null) {
                     this.server
                         .getPlayer(playerName)
-                        .ifPresent(this::handlePlayerAddedToBlacklist);
+                        .ifPresent(postAddHook);
                 }
                 yield added;
             }
@@ -402,10 +403,10 @@ public class WhitelistManager {
                 }
 
                 // Kick only once the blacklist state is confirmed: freshly added and saved, or already listed
-                if (isBlacklist) {
+                if (postAddHook != null) {
                     this.server
                         .getPlayer(uuid)
-                        .ifPresent(this::handlePlayerAddedToBlacklist);
+                        .ifPresent(postAddHook);
                 }
                 yield addedNew || nameChanged;
             }
@@ -540,7 +541,7 @@ public class WhitelistManager {
     }
 
     // Disconnects an online player who has been added to the blacklist
-    private void handlePlayerAddedToBlacklist(Player player) {
+    public void handlePlayerAddedToBlacklist(Player player) {
         var profile = player.getGameProfile();
         this.logger.info(
             "Kicking player {} ({}) since it's being added to the blacklist",
