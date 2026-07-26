@@ -156,24 +156,14 @@ public class WhitelistManager {
         };
     }
 
-    private interface NameModeHandler {
-        boolean handle(@Nullable UUID uuid, @NotNull String playerName);
-    }
+    private record ResolvedIdentity(
+        @Nullable UUID uuid,
+        @Nullable String playerName
+    ) {}
 
-    private interface UuidHandler {
-        boolean handle(
-            @NotNull UUID uuid,
-            @Nullable String playerName,
-            @NotNull String displayName
-        );
-    }
-
-    @SuppressWarnings("EnhancedSwitchMigration")
-    private boolean operatePlayer(
+    private Optional<ResolvedIdentity> resolveTarget(
         CommandSource source,
-        String value,
-        NameModeHandler handleNameMode,
-        UuidHandler handleUuidMode
+        String value
     ) {
         final Optional<UUID> inputUuid = UuidUtils.tryParseUuid(value);
         final boolean isUuidInput = inputUuid.isPresent();
@@ -219,38 +209,32 @@ public class WhitelistManager {
             ? inputUuid
             : profile.map(GameProfile::getId);
 
-        // Dispatch to the handler matching the configured identify mode
         return switch (this.config.getIdentifyMode()) {
             case NAME -> {
                 if (isUuidInput) {
                     source.sendPlainMessage(
                         "WARN: Trying to use UUID in NAME mode. Nothing will happen"
                     );
-                    yield false;
+                    yield Optional.empty();
                 }
                 // Prefers the resolved profile's name over the raw input: it's the canonical, case-preserved name checkPlayerName compares against at login, so storing the admin's possibly differently-cased input here would silently break the whitelist/blacklist match.
-                yield handleNameMode.handle(
+                yield Optional.of(new ResolvedIdentity(
                     uuid.orElse(null),
                     profile.map(GameProfile::getName).orElse(value)
-                );
+                ));
             }
             case UUID -> {
                 if (uuid.isEmpty()) {
                     source.sendPlainMessage(
                         "WARN: Trying to use a player name in UUID mode, and the player is not valid. Nothing will happen"
                     );
-                    yield false;
+                    yield Optional.empty();
                 }
 
-                UUID playerUuid = uuid.get();
-                String playerName = profile
-                    .map(GameProfile::getName)
-                    .orElse(null);
-                yield handleUuidMode.handle(
-                    playerUuid,
-                    playerName,
-                    pretty(playerUuid, playerName)
-                );
+                yield Optional.of(new ResolvedIdentity(
+                    uuid.get(),
+                    profile.map(GameProfile::getName).orElse(null)
+                ));
             }
         };
     }
@@ -275,13 +259,17 @@ public class WhitelistManager {
         String value
     ) {
         boolean isBlacklist = list == this.getBlacklist();
-        return this.operatePlayer(
-            source,
-            value,
-            (uuid, playerName) -> {
+        Optional<ResolvedIdentity> targetOpt = this.resolveTarget(source, value);
+        if (targetOpt.isEmpty()) {
+            return false;
+        }
+        ResolvedIdentity target = targetOpt.get();
+
+        return switch (this.config.getIdentifyMode()) {
+            case NAME -> {
+                String playerName = target.playerName();
                 boolean added;
 
-                // Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
                 synchronized (this.saveLock) {
                     added = list.addPlayerName(playerName);
                     if (
@@ -301,7 +289,7 @@ public class WhitelistManager {
                         )
                     ) {
                         // Skips the blacklist kick since the change was not saved
-                        return false;
+                        yield false;
                     }
                 }
 
@@ -333,14 +321,16 @@ public class WhitelistManager {
                         .getPlayer(playerName)
                         .ifPresent(this::handlePlayerAddedToBlacklist);
                 }
-                return added;
-            },
-            (uuid, playerName, displayName) -> {
+                yield added;
+            }
+            case UUID -> {
+                UUID uuid = target.uuid();
+                String playerName = target.playerName();
+                String displayName = pretty(uuid, playerName);
                 boolean addedNew;
                 boolean nameChanged;
                 PlayerList.UuidEntry oldEntry;
 
-                // Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
                 synchronized (this.saveLock) {
                     oldEntry = list.peekPlayerUUID(uuid);
                     addedNew = !oldEntry.exists();
@@ -372,7 +362,7 @@ public class WhitelistManager {
                             )
                         ) {
                             // Skips the blacklist kick since the change was not saved
-                            return false;
+                            yield false;
                         }
                     }
                 }
@@ -417,9 +407,9 @@ public class WhitelistManager {
                         .getPlayer(uuid)
                         .ifPresent(this::handlePlayerAddedToBlacklist);
                 }
-                return addedNew || nameChanged;
+                yield addedNew || nameChanged;
             }
-        );
+        };
     }
 
     // Removes a player from the specified list
@@ -428,11 +418,15 @@ public class WhitelistManager {
         PlayerList list,
         String value
     ) {
-        return this.operatePlayer(
-            source,
-            value,
-            (uuid, playerName) -> {
-                // Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
+        Optional<ResolvedIdentity> targetOpt = this.resolveTarget(source, value);
+        if (targetOpt.isEmpty()) {
+            return false;
+        }
+        ResolvedIdentity target = targetOpt.get();
+
+        return switch (this.config.getIdentifyMode()) {
+            case NAME -> {
+                String playerName = target.playerName();
                 synchronized (this.saveLock) {
                     if (list.removePlayerName(playerName)) {
                         if (
@@ -459,9 +453,9 @@ public class WhitelistManager {
                                     )
                                 )
                             );
-                            return true;
+                            yield true;
                         }
-                        return false;
+                        yield false;
                     }
                 }
                 source.sendMessage(
@@ -473,10 +467,13 @@ public class WhitelistManager {
                         )
                     )
                 );
-                return false;
-            },
-            (uuid, playerName, displayName) -> {
-                // Lock is acquired only after operatePlayer (which executes Mojang synchronous lookup) completes
+                yield false;
+            }
+            case UUID -> {
+                UUID uuid = target.uuid();
+                String playerName = target.playerName();
+                String displayName = pretty(uuid, playerName);
+
                 synchronized (this.saveLock) {
                     PlayerList.UuidEntry oldEntry = list.peekPlayerUUID(uuid);
                     if (oldEntry.exists()) {
@@ -510,9 +507,9 @@ public class WhitelistManager {
                                     )
                                 )
                             );
-                            return true;
+                            yield true;
                         }
-                        return false;
+                        yield false;
                     }
                 }
                 source.sendMessage(
@@ -524,9 +521,9 @@ public class WhitelistManager {
                         )
                     )
                 );
-                return false;
+                yield false;
             }
-        );
+        };
     }
 
     // Restores a UUID mapping to its previous state for undoing failed mutations
