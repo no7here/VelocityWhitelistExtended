@@ -6,10 +6,13 @@ import static me.fallenbreath.velocitywhitelist.command.CommandUtils.argument;
 import static me.fallenbreath.velocitywhitelist.command.CommandUtils.literal;
 import static me.fallenbreath.velocitywhitelist.command.CommandUtils.suggestMatching;
 
+import java.util.function.Consumer;
+
 import com.google.common.base.Joiner;
 import com.velocitypowered.api.command.BrigadierCommand;
 import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandSource;
+import com.velocitypowered.api.proxy.Player;
 
 import me.fallenbreath.velocitywhitelist.PluginMeta;
 import me.fallenbreath.velocitywhitelist.WhitelistManager;
@@ -30,7 +33,8 @@ public class WhitelistCommand {
     private void registerOne(
         CommandManager commandManager,
         String[] roots,
-        PlayerList list
+        PlayerList list,
+        Consumer<Player> postAddHook
     ) {
         if (roots.length == 0) {
             throw new IllegalArgumentException();
@@ -42,7 +46,7 @@ public class WhitelistCommand {
             .then(
                 literal("add").then(
                     argument("name", word()).executes(c ->
-                        addPlayer(c.getSource(), list, getString(c, "name"))
+                        addPlayer(c.getSource(), list, getString(c, "name"), postAddHook)
                     )
                 )
             )
@@ -91,12 +95,14 @@ public class WhitelistCommand {
         this.registerOne(
             commandManager,
             new String[] { "whitelist", "vwhitelist" },
-            this.manager.getWhitelist()
+            this.manager.getWhitelist(),
+            null
         );
         this.registerOne(
             commandManager,
             new String[] { "blacklist", "vblacklist" },
-            this.manager.getBlacklist()
+            this.manager.getBlacklist(),
+            this.manager::handlePlayerAddedToBlacklist
         );
     }
 
@@ -144,7 +150,8 @@ public class WhitelistCommand {
     private int addPlayer(
         CommandSource source,
         PlayerList list,
-        String playerName
+        String playerName,
+        Consumer<Player> postAddHook
     ) {
         if (!list.isActivated()) {
             source.sendMessage(
@@ -155,7 +162,7 @@ public class WhitelistCommand {
             return 0;
         }
 
-        if (this.manager.addPlayer(source, list, playerName)) {
+        if (this.manager.addPlayer(source, list, playerName, postAddHook)) {
             return 1;
         }
         return 0;

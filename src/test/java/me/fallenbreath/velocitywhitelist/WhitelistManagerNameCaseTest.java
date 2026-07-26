@@ -69,7 +69,8 @@ class WhitelistManagerNameCaseTest {
         boolean added = manager.addPlayer(
             source,
             manager.getWhitelist(),
-            "steve"
+            "steve",
+            null
         );
 
         assertTrue(added, "adding the player should succeed");
