@@ -21,7 +21,7 @@ If you're currently running TISUnion's original plugin, you can easily & safely 
 ***
 1. **Backup your existing config** - Just like any changes, make a backup of `plugin/velocitywhitelist` folder somewhere safe so you can easily revert back.
 2. **Stop your proxy** - Note that this is the proxy, not your Minecraft server. 
-3. **Replace the plugin** - Delete / move the existing `VelocityWhitelist.jar` from your proxy's `plugins` folder and upload this fork's `VelocityWhitelist.jar` from [releases](https://github.com/no7here/VelocityWhitelist/releases/latest) in its place.
+3. **Replace the plugin** - Delete / move the existing `VelocityWhitelist.jar` from your proxy's `plugins` folder and upload this fork's `VelocityWhitelist.jar` from [releases](https://github.com/no7here/VelocityWhitelistExtended/releases/latest) in its place.
 4. **Start your proxy again** - On first start, the plugin will automatically update your `config.yml` to the new format for you. Your existing whitelist, blacklist and settings (including whether you used names or UUIDs) are carried over unchanged.
 5. **Try new features (optional)** - By default, only IP bans are enabled on migration. If you would like to enable automatic blacklisting, edit the config file and run `/velocitywhitelist reload`.
 
@@ -44,21 +44,21 @@ identify_mode: uuid
 
 # Control if the whitelist is enabled
 whitelist_enabled: true
-# Message sent to players who aren't whitelisted
+# Message sent to players who aren't whitelisted. Supports MiniMessage formatting. 
 whitelist_kick_message: You are not in the whitelist!
 
 # Control if the blacklist is enabled (takes priority over whitelist if both are enabled)
 blacklist_enabled: true
-# Message sent to players who are blacklisted
+# Message sent to players who are blacklisted. Supports MiniMessage formatting. 
 blacklist_kick_message: You are banned from the server!
 
 # Control if IP bans are enabled
 ipban_enabled: true
-# Message sent to players who join on a banned IP address
+# Message sent to players who join on a banned IP address. Supports MiniMessage formatting. 
 ipban_kick_message: Your IP address is banned from the server!
 # Controls whether players should be automatically blacklisted when they try to join from a banned IP
 # REQUIRES: identify_mode to be set to uuid & proxy to be in online mode, else it will be ignored.
-blacklist_on_ipban_join: true
+blacklist_on_ipban_join: false
 ```
 
 > [!WARNING]
@@ -146,4 +146,3 @@ Updates that are planned for the (hopefully) near future.
 - [ ] Lock-free reads
 - [x] Configuration refactor 
 - [ ] Brigadier command extraction
-
