@@ -8,17 +8,17 @@ identify_mode: uuid
 
 # Control if the whitelist is enabled
 whitelist_enabled: true
-# Message sent to players who aren't whitelisted
+# Message sent to players who aren't whitelisted. Supports MiniMessage formatting.
 whitelist_kick_message: You are not in the whitelist!
 
 # Control if the blacklist is enabled (takes priority over whitelist if both are enabled)
 blacklist_enabled: true
-# Message sent to players who are blacklisted
+# Message sent to players who are blacklisted. Supports MiniMessage formatting.
 blacklist_kick_message: You are banned from the server!
 
 # Control if IP bans are enabled
 ipban_enabled: true
-# Message sent to players who join on a banned IP address
+# Message sent to players who join on a banned IP address. Supports MiniMessage formatting.
 ipban_kick_message: Your IP address is banned from the server!
 # Controls whether players should be automatically blacklisted when they try to join from a banned IP
 # REQUIRES: identify_mode to be set to uuid & proxy to be in online mode, else it will be ignored.
