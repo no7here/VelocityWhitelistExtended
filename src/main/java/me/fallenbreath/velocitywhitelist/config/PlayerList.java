@@ -44,31 +44,26 @@ public class PlayerList implements YamlStoredList<PlayerList> {
         this.configEnableGetter = configEnableGetter;
     }
 
-    // Gets the name of this list
     @Override
     public String getName() {
         return this.name;
     }
 
-    // Gets the file path of this list
     @Override
     public Path getFilePath() {
         return this.filePath;
     }
 
-    // Checks if the list was loaded successfully
     public boolean isLoadOk() {
         synchronized (this.lock) {
             return this.loadOk;
         }
     }
 
-    // Checks if the configuration is enabled for this list
     public boolean isConfigEnabled() {
         return this.configEnableGetter.get();
     }
 
-    // Checks if the list is activated
     public boolean isActivated() {
         return this.isLoadOk() && this.isConfigEnabled();
     }

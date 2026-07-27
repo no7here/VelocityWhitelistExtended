@@ -41,36 +41,30 @@ public class IpList implements YamlStoredList<IpList> {
         this.configEnableGetter = configEnableGetter;
     }
 
-    // Gets the name of the list
     @Override
     public String getName() {
         return this.name;
     }
 
-    // Gets the file path of the list
     @Override
     public Path getFilePath() {
         return this.filePath;
     }
 
-    // Checks if the list was loaded successfully
     public boolean isLoadOk() {
         synchronized (this.lock) {
             return this.loadOk;
         }
     }
 
-    // Checks if the list is enabled in the configuration
     public boolean isConfigEnabled() {
         return this.configEnableGetter.get();
     }
 
-    // Checks if the list is both loaded and enabled
     public boolean isActivated() {
         return this.isLoadOk() && this.isConfigEnabled();
     }
 
-    // Gets an immutable copy of the current IPs
     public ImmutableList<String> getIps() {
         synchronized (this.lock) {
             return ImmutableList.copyOf(this.ips);
@@ -188,7 +182,7 @@ public class IpList implements YamlStoredList<IpList> {
                 // A present but non-list value means the file is structurally corrupt so fail the whole load
                 if (!(ipsVal instanceof List<?> list)) {
                     throw new IOException(
-                        "The 'ips' field in the config is malformed (not a YAML list)"
+                        "The \"ips\" field in ipbans.yml is malformed (not a YAML list)"
                     );
                 }
                 for (Object entry : list) {

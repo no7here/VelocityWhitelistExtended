@@ -22,7 +22,6 @@ class IpListTest {
     // Tests if normalizeIpLiteral accepts a bracketed IPv6 address
     @Test
     void normalizeIpLiteral_acceptsBracketedIPv6() {
-        // Notes that bracket notation is used in URLs and logs but currently fails because normalizeIpLiteral only strips trailing "%scope" suffixes and not surrounding brackets
         Optional<String> result = IpList.normalizeIpLiteral("[::1]");
         assertTrue(
             result.isPresent(),

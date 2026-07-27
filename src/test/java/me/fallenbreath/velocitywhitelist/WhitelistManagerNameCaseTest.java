@@ -74,7 +74,6 @@ class WhitelistManagerNameCaseTest {
         );
 
         assertTrue(added, "adding the player should succeed");
-        // NAME-mode stores the raw lowercase command argument instead of the resolved canonical name which causes subsequent case-sensitive logins to fail
         assertTrue(
             manager.getWhitelist().checkPlayerName("Steve"),
             "the whitelist should store the resolved canonical-case name so a real login (profile.getName() == \"Steve\") actually matches"
