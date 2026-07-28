@@ -81,8 +81,8 @@ public class IpBanCommand {
         CommandSource source,
         String ipStr
     ) {
-        Optional<String> normalized = IpList.normalizeIpLiteral(ipStr);
-        if (normalized.isEmpty()) {
+        Optional<String> normalised = IpList.normaliseIpLiteral(ipStr);
+        if (normalised.isEmpty()) {
             source.sendMessage(
                 Component.text(
                     String.format(
@@ -92,7 +92,7 @@ public class IpBanCommand {
                 )
             );
         }
-        return normalized;
+        return normalised;
     }
 
     // Shows the status of the IP ban list

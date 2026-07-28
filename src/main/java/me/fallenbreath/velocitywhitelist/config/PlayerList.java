@@ -190,10 +190,7 @@ public class PlayerList implements YamlStoredList<PlayerList> {
         String yamlContent = Files.readString(this.filePath);
 
         // Load as a map instead of using loadAs with HashMap class because loadAs asks SafeConstructor to construct the root via an explicit tag which is not on its safe allowlist and throws, an empty file parses to null the same as Configuration's config.yml handling
-        Map<String, Object> options = (Map<
-            String,
-            Object
-        >) FileUtils.newSafeYaml().load(yamlContent);
+        Map<String, Object> options = (Map<String, Object>) FileUtils.newSafeYaml().load(yamlContent);
 
         synchronized (this.lock) {
             this.names.clear();

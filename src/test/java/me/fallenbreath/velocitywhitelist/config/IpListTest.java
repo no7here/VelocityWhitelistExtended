@@ -10,19 +10,19 @@ import org.junit.jupiter.api.io.TempDir;
 // Test class for IpList functionality
 class IpListTest {
 
-    // Tests if normalizeIpLiteral accepts a plain IPv6 address
+    // Tests if normaliseIpLiteral accepts a plain IPv6 address
     @Test
-    void normalizeIpLiteral_acceptsPlainIPv6() {
+    void normaliseIpLiteral_acceptsPlainIPv6() {
         assertTrue(
-            IpList.normalizeIpLiteral("::1").isPresent(),
+            IpList.normaliseIpLiteral("::1").isPresent(),
             "plain IPv6 loopback should parse"
         );
     }
 
-    // Tests if normalizeIpLiteral accepts a bracketed IPv6 address
+    // Tests if normaliseIpLiteral accepts a bracketed IPv6 address
     @Test
-    void normalizeIpLiteral_acceptsBracketedIPv6() {
-        Optional<String> result = IpList.normalizeIpLiteral("[::1]");
+    void normaliseIpLiteral_acceptsBracketedIPv6() {
+        Optional<String> result = IpList.normaliseIpLiteral("[::1]");
         assertTrue(
             result.isPresent(),
             "bracket-notation IPv6 should be accepted, same as the unbracketed form"

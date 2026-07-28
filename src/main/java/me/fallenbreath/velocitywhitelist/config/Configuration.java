@@ -63,10 +63,7 @@ public class Configuration {
     @SuppressWarnings("unchecked")
     public void load(String yamlContent) {
         // Parses and migrates into a staging map before publishing so a malformed config during a reload keeps the previous state enforced and concurrent logins never see a half-built option set
-        Map<String, Object> loadedOptions = (Map<
-            String,
-            Object
-        >) FileUtils.newSafeYaml().load(yamlContent);
+        Map<String, Object> loadedOptions = (Map<String, Object>) FileUtils.newSafeYaml().load(yamlContent);
 
         Map<String, Object> stagedOptions = Maps.newLinkedHashMap();
         if (loadedOptions != null) {
