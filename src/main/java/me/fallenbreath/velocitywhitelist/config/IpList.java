@@ -78,7 +78,7 @@ public class IpList implements YamlStoredList<IpList> {
     }
 
     // Strictly parses an IP literal into its canonical textual form and returns empty for anything else so no DNS lookup can ever happen
-    public static Optional<String> normalizeIpLiteral(String ipStr) {
+    public static Optional<String> normaliseIpLiteral(String ipStr) {
         String cleanIp = ipStr.trim();
         // Bracket notation is how IPv6 addresses appear in URLs and log lines so it is worth accepting even though it is not a literal IP by itself
         if (
@@ -99,34 +99,34 @@ public class IpList implements YamlStoredList<IpList> {
 
     // Checks if a given IP address is in the list
     public boolean checkIp(String ipStr) {
-        Optional<String> normalized = normalizeIpLiteral(ipStr);
-        if (normalized.isEmpty()) {
+        Optional<String> normalised = normaliseIpLiteral(ipStr);
+        if (normalised.isEmpty()) {
             return false;
         }
         synchronized (this.lock) {
-            return this.ips.contains(normalized.get());
+            return this.ips.contains(normalised.get());
         }
     }
 
     // Adds an IP address to the list
     public boolean addIp(String ipStr) {
-        Optional<String> normalized = normalizeIpLiteral(ipStr);
-        if (normalized.isEmpty()) {
+        Optional<String> normalised = normaliseIpLiteral(ipStr);
+        if (normalised.isEmpty()) {
             return false;
         }
         synchronized (this.lock) {
-            return this.ips.add(normalized.get());
+            return this.ips.add(normalised.get());
         }
     }
 
     // Removes an IP address from the list
     public boolean removeIp(String ipStr) {
-        Optional<String> normalized = normalizeIpLiteral(ipStr);
-        if (normalized.isEmpty()) {
+        Optional<String> normalised = normaliseIpLiteral(ipStr);
+        if (normalised.isEmpty()) {
             return false;
         }
         synchronized (this.lock) {
-            return this.ips.remove(normalized.get());
+            return this.ips.remove(normalised.get());
         }
     }
 
@@ -168,10 +168,7 @@ public class IpList implements YamlStoredList<IpList> {
         String yamlContent = Files.readString(this.filePath);
 
         // Use a plain load and cast because an explicit tag would be rejected by the safe constructor and an empty file parses to null
-        Map<String, Object> options = (Map<
-            String,
-            Object
-        >) FileUtils.newSafeYaml().load(yamlContent);
+        Map<String, Object> options = (Map<String, Object>) FileUtils.newSafeYaml().load(yamlContent);
 
         synchronized (this.lock) {
             this.ips.clear();
@@ -192,9 +189,9 @@ public class IpList implements YamlStoredList<IpList> {
                         continue;
                     }
                     String rawIp = entry.toString();
-                    Optional<String> normalized = normalizeIpLiteral(rawIp);
-                    if (normalized.isPresent()) {
-                        this.ips.add(normalized.get());
+                    Optional<String> normalised = normaliseIpLiteral(rawIp);
+                    if (normalised.isPresent()) {
+                        this.ips.add(normalised.get());
                     } else {
                         logger.warn("Skipping invalid IP ban entry: {}", rawIp);
                         skipped++;

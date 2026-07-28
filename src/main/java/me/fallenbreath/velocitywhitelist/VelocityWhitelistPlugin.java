@@ -64,7 +64,7 @@ public class VelocityWhitelistPlugin {
 
     // Handles the proxy initialisation event
     @Subscribe
-    public void onProxyInitialization(ProxyInitializeEvent event) {
+    public void onProxyInitialisation(ProxyInitializeEvent event) {
         if (!this.prepareConfig()) {
             this.logger.error(
                 "Failed to prepare config, the plugin will not work"

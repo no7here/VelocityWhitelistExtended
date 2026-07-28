@@ -24,7 +24,7 @@ class PlayerListTest {
         UUID uuid = UUID.randomUUID();
         list.putPlayerUUID(uuid, "OldName");
 
-        // "ImmutableList.copyOf(map.entrySet())" only freezes list container - Map.Entry objects inside are still live nodes. A repeat put() for same key mutates existing node's value, so an entry handed out earlier can silently change value after the fact.		//
+        // "ImmutableList.copyOf(map.entrySet())" only freezes list container - Map.Entry objects inside are still live nodes. A repeat put() for same key mutates existing node's value, so an entry handed out earlier can silently change value after the fact.
         Map.Entry<UUID, String> entry = list
             .getPlayerUuidMappingEntries()
             .get(0);
