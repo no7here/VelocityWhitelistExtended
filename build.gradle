@@ -14,9 +14,29 @@ repositories {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
 }
+
+def generateVersion = tasks.register('generateVersion') {
+    def outputDir = layout.buildDirectory.dir("generated/sources/version/me/fallenbreath/velocitywhitelist")
+    def outputFile = outputDir.map { it.file("BuildInfo.java") }
+    inputs.property("version", project.plugin_version)
+    outputs.file(outputFile)
+    doLast {
+        def file = outputFile.get().asFile
+        file.parentFile.mkdirs()
+        file.text = """package me.fallenbreath.velocitywhitelist;
+
+public class BuildInfo {
+    public static final String VERSION = "${project.plugin_version}";
+}
+"""
+    }
+}
+sourceSets.main.java.srcDir(layout.buildDirectory.dir("generated/sources/version"))
+compileJava.dependsOn(generateVersion)
 
 dependencies {
     compileOnly "com.velocitypowered:velocity-api:${project.velocity_api_version}"
