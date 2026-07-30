@@ -33,7 +33,7 @@ public class IpBanCommand {
         var roots = new String[] { "ipban", "vipban" };
 
         var root = literal(roots[0])
-            .requires(s -> s.hasPermission(PluginMeta.ID + ".command"))
+            .requires(s -> s.hasPermission(PluginMeta.COMMAND_PERMISSION))
             .executes(c -> showStatus(c.getSource()))
             .then(
                 literal("add")
@@ -67,7 +67,7 @@ public class IpBanCommand {
 
         for (int i = 1; i < roots.length; i++) {
             var alternative = literal(roots[i])
-                .requires(s -> s.hasPermission(PluginMeta.ID + ".command"))
+                .requires(s -> s.hasPermission(PluginMeta.COMMAND_PERMISSION))
                 // A bare redirect node is not executable in Brigadier so the alias needs its own executes
                 .executes(c -> showStatus(c.getSource()))
                 .redirect(rootNode);

@@ -41,7 +41,7 @@ public class WhitelistCommand {
         }
 
         var root = literal(roots[0])
-            .requires(s -> s.hasPermission(PluginMeta.ID + ".command"))
+            .requires(s -> s.hasPermission(PluginMeta.COMMAND_PERMISSION))
             .executes(c -> showListStatus(c.getSource(), list))
             .then(
                 literal("add").then(
@@ -81,7 +81,7 @@ public class WhitelistCommand {
 
         for (int i = 1; i < roots.length; i++) {
             var alternative = literal(roots[i])
-                .requires(s -> s.hasPermission(PluginMeta.ID + ".command"))
+                .requires(s -> s.hasPermission(PluginMeta.COMMAND_PERMISSION))
                 // A bare redirect node is not executable in brigadier so the alias needs its own executes
                 .executes(c -> showListStatus(c.getSource(), list))
                 .redirect(rootNode);

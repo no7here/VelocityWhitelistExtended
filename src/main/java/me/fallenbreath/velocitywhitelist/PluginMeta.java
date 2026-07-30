@@ -7,4 +7,5 @@ public class PluginMeta
     public static final String NAME = "VelocityWhitelistExtended";
     public static final String VERSION = BuildInfo.VERSION;
     public static final String REPOSITORY_URL = "https://github.com/no7here/VelocityWhitelistExtended";
+    public static final String COMMAND_PERMISSION = ID + ".command";
 }

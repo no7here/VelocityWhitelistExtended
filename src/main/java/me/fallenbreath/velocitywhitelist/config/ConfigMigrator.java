@@ -92,7 +92,7 @@ final class ConfigMigrator {
             option(
                 options,
                 "whitelist_kick_message",
-                option(options, "kick_message", "You are not in the whitelist!")
+                option(options, "kick_message", Configuration.DEFAULT_WHITELIST_KICK_MESSAGE)
             )
         );
         newOptions.put(
@@ -108,7 +108,7 @@ final class ConfigMigrator {
             option(
                 options,
                 "blacklist_kick_message",
-                "You are banned from the server!"
+                Configuration.DEFAULT_BLACKLIST_KICK_MESSAGE
             )
         );
         newOptions.put("ipban_enabled", option(options, "ipban_enabled", true));
@@ -117,7 +117,7 @@ final class ConfigMigrator {
             option(
                 options,
                 "ipban_kick_message",
-                "Your IP address is banned from the server!"
+                Configuration.DEFAULT_IPBAN_KICK_MESSAGE
             )
         );
         newOptions.put(
