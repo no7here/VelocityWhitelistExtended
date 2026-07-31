@@ -162,11 +162,8 @@ public class WhitelistCommand {
             return 0;
         }
 
-        WhitelistManager.ModifyResult result = this.manager.addPlayer(source, list, playerName, postAddHook);
-        if (result != WhitelistManager.ModifyResult.ERROR) {
-            return 1;
-        }
-        return 0;
+        this.manager.runAsync(() -> this.manager.addPlayer(source, list, playerName, postAddHook));
+        return 1;
     }
 
     // Removes a player from the specified list
@@ -184,11 +181,8 @@ public class WhitelistCommand {
             return 0;
         }
 
-        WhitelistManager.ModifyResult result = this.manager.removePlayer(source, list, playerName);
-        if (result != WhitelistManager.ModifyResult.ERROR) {
-            return 1;
-        }
-        return 0;
+        this.manager.runAsync(() -> this.manager.removePlayer(source, list, playerName));
+        return 1;
     }
 
     // Lists all players in the specified list

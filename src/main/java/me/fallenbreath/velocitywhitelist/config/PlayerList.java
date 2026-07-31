@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -82,14 +83,24 @@ public class PlayerList implements YamlStoredList<PlayerList> {
         }
     }
 
-    // Adds a player name to the list
+    /**
+     * Adds a player name to the list.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
     public boolean addPlayerName(String name) {
         synchronized (this.lock) {
             return this.names.add(name);
         }
     }
 
-    // Removes a player name from the list
+    /**
+     * Removes a player name from the list.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
     public boolean removePlayerName(String name) {
         synchronized (this.lock) {
             return this.names.remove(name);
@@ -132,14 +143,24 @@ public class PlayerList implements YamlStoredList<PlayerList> {
         }
     }
 
-    // Adds or updates a player UUID and their associated name in the list
+    /**
+     * Adds or updates a player UUID and their associated name in the list.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
     public void putPlayerUUID(UUID uuid, @Nullable String playerName) {
         synchronized (this.lock) {
             this.uuids.put(uuid, playerName);
         }
     }
 
-    // Removes a player UUID from the list
+    /**
+     * Removes a player UUID from the list.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
     public @Nullable String removePlayerUUID(UUID uuid) {
         synchronized (this.lock) {
             return this.uuids.remove(uuid);

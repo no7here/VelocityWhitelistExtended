@@ -29,9 +29,17 @@ import me.fallenbreath.velocitywhitelist.utils.UuidUtils;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 
-// Manages the whitelist, blacklist and IP ban lists for the proxy
+/**
+ * Manages the whitelist, blacklist and IP ban lists for the proxy.
+ *
+ * Locking tiers and invariants:
+ * 1. list.lock: Lowest level lock, internal to YamlStoredList implementations. Protects only the in-memory sets/maps.
+ * 2. manager.saveLock: Protects atomic mutations to whitelist/blacklist that involve disk writes. Must not be held across blocking operations (e.g. HTTP calls).
+ * 3. manager.ipBanLock: Protects atomic mutations to the ip ban list.
+ */
 public class WhitelistManager {
 
+    private final Object plugin;
     private final Logger logger;
     private final Configuration config;
     private final ProxyServer server;
@@ -52,11 +60,13 @@ public class WhitelistManager {
     private static final long SKIP_WARNING_LOG_COOLDOWN_MS = 5000;
 
     public WhitelistManager(
+        Object plugin,
         Logger logger,
         Configuration config,
         Path dataDirectory,
         ProxyServer server
     ) {
+        this.plugin = plugin;
         this.logger = logger;
         this.config = config;
         this.whitelist = new PlayerList(
@@ -89,8 +99,22 @@ public class WhitelistManager {
         return this.ipBanList;
     }
 
-    public Object getIpBanLock() {
-        return this.ipBanLock;
+    public void runAsync(Runnable task) {
+        this.server.getScheduler().buildTask(this.plugin, task).schedule();
+    }
+
+    public boolean reloadIpBansAndKick(CommandSource source) {
+        boolean success;
+        synchronized (this.ipBanLock) {
+            success = this.loadIpList(this.ipBanList);
+        }
+        if (success) {
+            source.sendMessage(Component.text("IP ban list reloaded"));
+            this.kickIpBannedPlayers();
+        } else {
+            source.sendMessage(Component.text("IP ban list reload failed, see console for details"));
+        }
+        return success;
     }
 
     public boolean loadLists() {
@@ -554,7 +578,24 @@ public class WhitelistManager {
 
     // Kicks all connected players whose IP address matches an entry in the ban list
     public void kickIpBannedPlayers() {
-        if (!this.ipBanList.isActivated()) {
+        List<Player> toKick = Lists.newArrayList();
+        synchronized (this.ipBanLock) {
+            if (!this.ipBanList.isActivated()) {
+                return;
+            }
+            for (Player player : this.server.getAllPlayers()) {
+                InetSocketAddress address = player.getRemoteAddress();
+                // getAddress() returns null for unresolved socket addresses
+                if (address != null && address.getAddress() != null) {
+                    String ipString = address.getAddress().getHostAddress();
+                    if (this.ipBanList.checkIp(ipString)) {
+                        toKick.add(player);
+                    }
+                }
+            }
+        }
+
+        if (toKick.isEmpty()) {
             return;
         }
 
@@ -562,26 +603,24 @@ public class WhitelistManager {
             this.config.getIpBanKickMessage()
         );
 
-        for (Player player : this.server.getAllPlayers()) {
+        for (Player player : toKick) {
             InetSocketAddress address = player.getRemoteAddress();
-            // getAddress() returns null for unresolved socket addresses
             if (address != null && address.getAddress() != null) {
                 String ipString = address.getAddress().getHostAddress();
-                if (this.ipBanList.checkIp(ipString)) {
-                    this.logger.info(
-                        "Kicking connected player {} ({}) since their IP ({}) is banned",
-                        player.getUsername(),
-                        player.getUniqueId(),
-                        ipString
-                    );
-                    player.disconnect(message);
-                }
+                this.logger.info(
+                    "Kicking connected player {} ({}) since their IP ({}) is banned",
+                    player.getUsername(),
+                    player.getUniqueId(),
+                    ipString
+                );
+                player.disconnect(message);
             }
         }
     }
 
     // Adds an IP to the ban list and saves it, matching addPlayer()'s mutate/save/rollback shape
     public ModifyResult addIp(CommandSource source, String ip) {
+        boolean success = false;
         synchronized (this.ipBanLock) {
             if (this.ipBanList.addIp(ip)) {
                 if (
@@ -601,18 +640,24 @@ public class WhitelistManager {
                             String.format("Added IP %s to the IP ban list", ip)
                         )
                     );
-                    this.kickIpBannedPlayers();
-                    return ModifyResult.SUCCESS;
+                    success = true;
+                } else {
+                    return ModifyResult.ERROR;
                 }
-                return ModifyResult.ERROR;
+            } else {
+                source.sendMessage(
+                    Component.text(
+                        String.format("IP %s is already in the IP ban list", ip)
+                    )
+                );
+                return ModifyResult.NO_CHANGE;
             }
         }
-        source.sendMessage(
-            Component.text(
-                String.format("IP %s is already in the IP ban list", ip)
-            )
-        );
-        return ModifyResult.NO_CHANGE;
+        if (success) {
+            this.kickIpBannedPlayers();
+            return ModifyResult.SUCCESS;
+        }
+        return ModifyResult.ERROR;
     }
 
     // Removes an IP from the ban list and saves it, matching removePlayer()'s mutate/save/rollback shape
@@ -719,17 +764,19 @@ public class WhitelistManager {
             return;
         }
 
-        synchronized (this.saveLock) {
-            // Nothing to do if already blacklisted with an up-to-date name
-            if (!this.blacklistEntryNeedsUpdate(profile)) {
-                return;
+        this.runAsync(() -> {
+            synchronized (this.saveLock) {
+                // Nothing to do if already blacklisted with an up-to-date name
+                if (!this.blacklistEntryNeedsUpdate(profile)) {
+                    return;
+                }
+                // Quota is only consumed when a write is actually needed
+                if (!this.tryAcquireAutoBlacklistQuota()) {
+                    return;
+                }
+                this.autoBlacklistByUuid(profile);
             }
-            // Quota is only consumed when a write is actually needed
-            if (!this.tryAcquireAutoBlacklistQuota()) {
-                return;
-            }
-            this.autoBlacklistByUuid(profile);
-        }
+        });
     }
 
     // Must be called while holding saveLock

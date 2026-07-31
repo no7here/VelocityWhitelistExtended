@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 
@@ -108,7 +109,12 @@ public class IpList implements YamlStoredList<IpList> {
         }
     }
 
-    // Adds an IP address to the list
+    /**
+     * Adds an IP address to the list.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
     public boolean addIp(String ipStr) {
         Optional<String> normalised = normaliseIpLiteral(ipStr);
         if (normalised.isEmpty()) {
@@ -119,7 +125,12 @@ public class IpList implements YamlStoredList<IpList> {
         }
     }
 
-    // Removes an IP address from the list
+    /**
+     * Removes an IP address from the list.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
     public boolean removeIp(String ipStr) {
         Optional<String> normalised = normaliseIpLiteral(ipStr);
         if (normalised.isEmpty()) {
