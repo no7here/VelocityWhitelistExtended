@@ -98,7 +98,7 @@ final class ConfigMigrator {
         // Backup legacy config
         try {
             java.nio.file.Path backupPath = this.configFilePath.resolveSibling("config.yml.v1.bak");
-            java.nio.file.Files.copy(this.configFilePath, backupPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            FileUtils.safeWrite(backupPath, content);
             this.logger.info("Created a backup of the legacy configuration at {}", backupPath.getFileName());
         } catch (IOException e) {
             this.logger.error("Failed to backup legacy configuration. Aborting migration.", e);
@@ -133,7 +133,7 @@ final class ConfigMigrator {
                     newContent += "\n# Identify mode (name or uuid)\n";
                     newContent += "identify_mode: \"name\"\n";
                 }
-                
+
                 FileUtils.safeWrite(this.configFilePath, newContent);
                 regexSuccess = true;
                 this.logger.info("Successfully migrated configuration to v2 while preserving comments.");
