@@ -126,6 +126,7 @@ public class MojangAPI {
                     ))
             ) {
                 addQueryCache.accept(null, QUERY_CACHE_EMPTY_TTL_MS);
+                return Optional.empty();
             }
 
             if (obj == null || Strings.isNullOrEmpty(obj.id)) {

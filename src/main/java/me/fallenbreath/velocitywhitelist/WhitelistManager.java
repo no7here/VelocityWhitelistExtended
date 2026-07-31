@@ -77,14 +77,6 @@ public class WhitelistManager {
         this.server = server;
     }
 
-    public Configuration getConfig() {
-        return this.config;
-    }
-
-    public ProxyServer getServer() {
-        return this.server;
-    }
-
     public PlayerList getWhitelist() {
         return this.whitelist;
     }
@@ -102,10 +94,11 @@ public class WhitelistManager {
     }
 
     public boolean loadLists() {
-        boolean ok1 = this.loadOneList(this.whitelist);
-        boolean ok2 = this.loadOneList(this.blacklist);
-        boolean ok3 = this.loadIpList(this.ipBanList);
-        return ok1 && ok2 && ok3;
+        boolean allSuccess = true;
+        allSuccess &= this.loadOneList(this.whitelist);
+        allSuccess &= this.loadOneList(this.blacklist);
+        allSuccess &= this.loadIpList(this.ipBanList);
+        return allSuccess;
     }
 
     private boolean isPlayerInList(GameProfile profile, PlayerList list) {
@@ -254,7 +247,13 @@ public class WhitelistManager {
         return false;
     }
 
-    public boolean addPlayer(
+    public enum ModifyResult {
+        SUCCESS,
+        NO_CHANGE,
+        ERROR
+    }
+
+    public ModifyResult addPlayer(
         CommandSource source,
         PlayerList list,
         String value,
@@ -262,7 +261,7 @@ public class WhitelistManager {
     ) {
         Optional<ResolvedIdentity> targetOpt = this.resolveTarget(source, value);
         if (targetOpt.isEmpty()) {
-            return false;
+            return ModifyResult.ERROR;
         }
         ResolvedIdentity target = targetOpt.get();
 
@@ -290,7 +289,7 @@ public class WhitelistManager {
                         )
                     ) {
                         // Skips the blacklist kick since the change was not saved
-                        yield false;
+                        yield ModifyResult.ERROR;
                     }
                 }
 
@@ -322,7 +321,7 @@ public class WhitelistManager {
                         .getPlayer(playerName)
                         .ifPresent(postAddHook);
                 }
-                yield added;
+                yield added ? ModifyResult.SUCCESS : ModifyResult.NO_CHANGE;
             }
             case UUID -> {
                 UUID uuid = target.uuid();
@@ -363,7 +362,7 @@ public class WhitelistManager {
                             )
                         ) {
                             // Skips the blacklist kick since the change was not saved
-                            yield false;
+                            yield ModifyResult.ERROR;
                         }
                     }
                 }
@@ -408,20 +407,20 @@ public class WhitelistManager {
                         .getPlayer(uuid)
                         .ifPresent(postAddHook);
                 }
-                yield addedNew || nameChanged;
+                yield (addedNew || nameChanged) ? ModifyResult.SUCCESS : ModifyResult.NO_CHANGE;
             }
         };
     }
 
     // Removes a player from the specified list
-    public boolean removePlayer(
+    public ModifyResult removePlayer(
         CommandSource source,
         PlayerList list,
         String value
     ) {
         Optional<ResolvedIdentity> targetOpt = this.resolveTarget(source, value);
         if (targetOpt.isEmpty()) {
-            return false;
+            return ModifyResult.ERROR;
         }
         ResolvedIdentity target = targetOpt.get();
 
@@ -454,9 +453,9 @@ public class WhitelistManager {
                                     )
                                 )
                             );
-                            yield true;
+                            yield ModifyResult.SUCCESS;
                         }
-                        yield false;
+                        yield ModifyResult.ERROR;
                     }
                 }
                 source.sendMessage(
@@ -468,7 +467,7 @@ public class WhitelistManager {
                         )
                     )
                 );
-                yield false;
+                yield ModifyResult.NO_CHANGE;
             }
             case UUID -> {
                 UUID uuid = target.uuid();
@@ -508,9 +507,9 @@ public class WhitelistManager {
                                     )
                                 )
                             );
-                            yield true;
+                            yield ModifyResult.SUCCESS;
                         }
-                        yield false;
+                        yield ModifyResult.ERROR;
                     }
                 }
                 source.sendMessage(
@@ -522,7 +521,7 @@ public class WhitelistManager {
                         )
                     )
                 );
-                yield false;
+                yield ModifyResult.NO_CHANGE;
             }
         };
     }
@@ -583,7 +582,7 @@ public class WhitelistManager {
     }
 
     // Adds an IP to the ban list and saves it, matching addPlayer()'s mutate/save/rollback shape
-    public boolean addIp(CommandSource source, String ip) {
+    public ModifyResult addIp(CommandSource source, String ip) {
         synchronized (this.ipBanLock) {
             if (this.ipBanList.addIp(ip)) {
                 if (
@@ -604,9 +603,9 @@ public class WhitelistManager {
                         )
                     );
                     this.kickIpBannedPlayers();
-                    return true;
+                    return ModifyResult.SUCCESS;
                 }
-                return false;
+                return ModifyResult.ERROR;
             }
         }
         source.sendMessage(
@@ -614,11 +613,11 @@ public class WhitelistManager {
                 String.format("IP %s is already in the IP ban list", ip)
             )
         );
-        return false;
+        return ModifyResult.NO_CHANGE;
     }
 
     // Removes an IP from the ban list and saves it, matching removePlayer()'s mutate/save/rollback shape
-    public boolean removeIp(CommandSource source, String ip) {
+    public ModifyResult removeIp(CommandSource source, String ip) {
         synchronized (this.ipBanLock) {
             if (this.ipBanList.removeIp(ip)) {
                 if (
@@ -641,15 +640,15 @@ public class WhitelistManager {
                             )
                         )
                     );
-                    return true;
+                    return ModifyResult.SUCCESS;
                 }
-                return false;
+                return ModifyResult.ERROR;
             }
         }
         source.sendMessage(
             Component.text(String.format("IP %s is not in the IP ban list", ip))
         );
-        return false;
+        return ModifyResult.NO_CHANGE;
     }
 
     // Evaluates incoming connections against the IP ban list, blacklist and whitelist (in that order)
