@@ -58,7 +58,7 @@ class WhitelistManagerNameCaseTest {
         when(server.getPlayer("steve")).thenReturn(Optional.of(onlinePlayer));
 
         WhitelistManager manager = new WhitelistManager(
-            new Object(),
+            mock(VelocityWhitelistPlugin.class),
             logger,
             config,
             tempDir,

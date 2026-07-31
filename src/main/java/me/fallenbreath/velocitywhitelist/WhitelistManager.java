@@ -39,7 +39,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage;
  */
 public class WhitelistManager {
 
-    private final Object plugin;
+    private final VelocityWhitelistPlugin plugin;
     private final Logger logger;
     private final Configuration config;
     private final ProxyServer server;
@@ -60,7 +60,7 @@ public class WhitelistManager {
     private static final long SKIP_WARNING_LOG_COOLDOWN_MS = 5000;
 
     public WhitelistManager(
-        Object plugin,
+        VelocityWhitelistPlugin plugin,
         Logger logger,
         Configuration config,
         Path dataDirectory,
@@ -699,6 +699,13 @@ public class WhitelistManager {
     public void onPlayerLogin(LoginEvent event) {
         Player player = event.getPlayer();
         GameProfile profile = player.getGameProfile();
+
+        if (!this.plugin.isActivated()) {
+            event.setResult(ResultedEvent.ComponentResult.denied(Component.text("Server is currently in maintenance mode due to a configuration error. Please contact the administrator.")));
+            this.logger.info("Denied login for {} because the plugin is in fail-close mode due to configuration errors.", profile.getName());
+            return;
+        }
+
         InetSocketAddress remoteAddress = player.getRemoteAddress();
 
         // getAddress() returns null for unresolved socket addresses

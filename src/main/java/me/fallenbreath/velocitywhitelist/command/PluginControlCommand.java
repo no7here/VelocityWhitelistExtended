@@ -11,6 +11,7 @@ import com.velocitypowered.api.command.CommandManager;
 import com.velocitypowered.api.command.CommandSource;
 
 import me.fallenbreath.velocitywhitelist.PluginMeta;
+import me.fallenbreath.velocitywhitelist.VelocityWhitelistPlugin;
 import me.fallenbreath.velocitywhitelist.WhitelistManager;
 import me.fallenbreath.velocitywhitelist.config.Configuration;
 import net.kyori.adventure.text.Component;
@@ -21,16 +22,19 @@ import net.kyori.adventure.text.format.TextDecoration;
 // Command for controlling the plugin
 public class PluginControlCommand {
 
+    private final VelocityWhitelistPlugin plugin;
     private final Logger logger;
     private final Configuration config;
     private final WhitelistManager manager;
 
     // Creates a new plugin control command
     public PluginControlCommand(
+        VelocityWhitelistPlugin plugin,
         Logger logger,
         Configuration config,
         WhitelistManager whitelistManager
     ) {
+        this.plugin = plugin;
         this.logger = logger;
         this.config = config;
         this.manager = whitelistManager;
@@ -51,6 +55,7 @@ public class PluginControlCommand {
         try {
             this.config.reload();
             boolean loaded = this.manager.loadLists();
+            this.plugin.setActivated(loaded);
             this.manager.kickIpBannedPlayers();
             if (loaded) {
                 source.sendMessage(
@@ -69,6 +74,7 @@ public class PluginControlCommand {
             }
         } catch (Exception e) {
             this.logger.error("Failed to reload", e);
+            this.plugin.setActivated(false);
             source.sendMessage(
                 Component.text("Reload failed, see console for details")
             );

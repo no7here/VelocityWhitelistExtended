@@ -39,6 +39,24 @@ public class VelocityWhitelistPlugin {
     private final Path configFilePath;
     private final Configuration config;
     private final WhitelistManager whitelistManager;
+    private boolean activated = false;
+
+    public boolean isActivated() {
+        return this.activated;
+    }
+
+    public void setActivated(boolean activated) {
+        this.activated = activated;
+        if (!activated) {
+            this.logger.error("=========================================");
+            this.logger.error("VELOCITY WHITELIST FAILED TO LOAD CORRECTLY");
+            this.logger.error("THE PLUGIN IS NOW IN FAIL-CLOSE MODE.");
+            this.logger.error("ALL PLAYERS WILL BE BLOCKED FROM JOINING.");
+            this.logger.error("PLEASE CHECK THE ERRORS ABOVE, FIX THE CONFIG OR LISTS,");
+            this.logger.error("AND RUN /velocitywhitelist reload TO RECOVER.");
+            this.logger.error("=========================================");
+        }
+    }
 
     // Initialises the plugin with injected dependencies
     @Inject
@@ -66,14 +84,14 @@ public class VelocityWhitelistPlugin {
     // Handles the proxy initialisation event
     @Subscribe
     public void onProxyInitialisation(ProxyInitializeEvent event) {
-        if (!this.prepareConfig()) {
-            this.logger.error(
-                "Failed to prepare config, the plugin will not work"
-            );
-            return;
+        boolean configOk = this.prepareConfig();
+        boolean listsOk = false;
+
+        if (configOk) {
+            listsOk = this.whitelistManager.loadLists();
         }
 
-        this.whitelistManager.loadLists();
+        this.setActivated(configOk && listsOk);
 
         this.server
             .getEventManager()
@@ -89,6 +107,7 @@ public class VelocityWhitelistPlugin {
             this.server.getCommandManager()
         );
         new PluginControlCommand(
+            this,
             this.logger,
             this.config,
             this.whitelistManager
