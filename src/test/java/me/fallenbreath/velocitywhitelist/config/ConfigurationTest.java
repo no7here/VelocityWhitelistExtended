@@ -80,9 +80,12 @@ class ConfigurationTest {
         );
 
         // Version detection must not only accept a YAML number for version but also a hand-quoted string, and an already-current config must not be treated as legacy and re-migrated on every load
-        config.load(
-            "version: \"2\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n"
-        );
+        try {
+            java.nio.file.Files.writeString(tempDir.resolve("config.yml"), "version: \"2\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
+            config.reload();
+        } catch (java.io.IOException e) {
+            org.junit.jupiter.api.Assertions.fail(e);
+        }
 
         verify(logger, never()).warn(
             eq("Migrating config file from {} to v{}"),
@@ -103,11 +106,12 @@ class ConfigurationTest {
         );
 
         // A digit-only quoted version larger than Integer.MAX_VALUE still matches regex check, so it is treated as an already-current version
-        assertDoesNotThrow(() ->
-            config.load(
-                "version: \"99999999999999999999\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n"
-            )
-        );
+        try {
+            java.nio.file.Files.writeString(tempDir.resolve("config.yml"), "version: \"99999999999999999999\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
+            assertDoesNotThrow(() -> config.reload());
+        } catch (java.io.IOException e) {
+            org.junit.jupiter.api.Assertions.fail(e);
+        }
 
         verify(logger, never()).warn(
             eq("Migrating config file from {} to v{}"),
