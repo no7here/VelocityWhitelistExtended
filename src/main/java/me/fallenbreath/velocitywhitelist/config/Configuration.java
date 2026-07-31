@@ -9,7 +9,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 
-import com.google.common.base.Supplier;
+import java.util.function.Supplier;
 import com.google.common.collect.Maps;
 
 import me.fallenbreath.velocitywhitelist.IdentifyMode;
@@ -17,6 +17,10 @@ import me.fallenbreath.velocitywhitelist.utils.FileUtils;
 
 // Manages the configuration settings for the VelocityWhitelist plugin
 public class Configuration {
+
+    public static final String DEFAULT_WHITELIST_KICK_MESSAGE = "You are not in the whitelist!";
+    public static final String DEFAULT_BLACKLIST_KICK_MESSAGE = "You are banned from the server!";
+    public static final String DEFAULT_IPBAN_KICK_MESSAGE = "Your IP address is banned from the server!";
 
     // Bundles every field derived from a single load or reload so it can be published as one unit
     private static final class Snapshot {
@@ -150,7 +154,7 @@ public class Configuration {
         if (message instanceof String) {
             return (String) message;
         }
-        return "You are not in the whitelist!";
+        return DEFAULT_WHITELIST_KICK_MESSAGE;
     }
 
     // Retrieves the kick message displayed to players who are on the blacklist
@@ -159,7 +163,7 @@ public class Configuration {
         if (message instanceof String) {
             return (String) message;
         }
-        return "You are banned from the server!";
+        return DEFAULT_BLACKLIST_KICK_MESSAGE;
     }
 
     // Retrieves the kick message displayed to players attempting to join from a banned IP address
@@ -168,6 +172,6 @@ public class Configuration {
         if (message instanceof String) {
             return (String) message;
         }
-        return "Your IP address is banned from the server!";
+        return DEFAULT_IPBAN_KICK_MESSAGE;
     }
 }

@@ -6,7 +6,7 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 
-import com.google.common.base.Supplier;
+import java.util.function.Supplier;
 
 import me.fallenbreath.velocitywhitelist.IdentifyMode;
 import me.fallenbreath.velocitywhitelist.PluginMeta;

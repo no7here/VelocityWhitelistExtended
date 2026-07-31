@@ -40,7 +40,7 @@ public class PluginControlCommand {
     @SuppressWarnings("deprecation") // Next time for sure...
     public void register(CommandManager commandManager) {
         var root = literal("velocitywhitelist")
-            .requires(s -> s.hasPermission(PluginMeta.ID + ".command"))
+            .requires(s -> s.hasPermission(PluginMeta.COMMAND_PERMISSION))
             .executes(c -> showPluginInfo(c.getSource()))
             .then(literal("reload").executes(c -> reloadAll(c.getSource())));
         commandManager.register(new BrigadierCommand(root.build()));
