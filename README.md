@@ -22,7 +22,7 @@ If you're currently running TISUnion's original plugin, you can easily & safely 
 1. **Backup your existing config** - Just like any changes, make a backup of `plugin/velocitywhitelist` folder somewhere safe so you can easily revert back.
 2. **Stop your proxy** - Note that this is the proxy, not your Minecraft server. 
 3. **Replace the plugin** - Delete / move the existing `VelocityWhitelist.jar` from your proxy's `plugins` folder and upload this fork's `VelocityWhitelist.jar` from [releases](https://github.com/no7here/VelocityWhitelistExtended/releases/latest) in its place.
-4. **Start your proxy again** - On first start, the plugin will automatically update your `config.yml` to the new format for you. Your existing whitelist, blacklist and settings (including whether you used names or UUIDs) are carried over unchanged.
+4. **Start your proxy again** - On first start, the plugin will automatically update your `config.yml` to the new format for you, whilst preserving your custom comments. A backup of your legacy configuration will automatically be saved to `config.yml.v1.bak` just in case. Your existing whitelist, blacklist and settings (including whether you used names or UUIDs) are carried over unchanged.
 5. **Try new features (optional)** - By default, only IP bans are enabled on migration. If you would like to enable automatic blacklisting, edit the config file and run `/velocitywhitelist reload`.
 
 ***
