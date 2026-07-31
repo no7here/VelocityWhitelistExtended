@@ -55,6 +55,7 @@ public class VelocityWhitelistPlugin {
             server.getConfiguration().isOnlineMode()
         );
         this.whitelistManager = new WhitelistManager(
+            this,
             logger,
             this.config,
             this.dataDirectory,

@@ -139,11 +139,8 @@ public class IpBanCommand {
             return 0;
         }
 
-        WhitelistManager.ModifyResult result = this.manager.addIp(source, parsed.get());
-        if (result != WhitelistManager.ModifyResult.ERROR) {
-            return 1;
-        }
-        return 0;
+        this.manager.runAsync(() -> this.manager.addIp(source, parsed.get()));
+        return 1;
     }
 
     // Removes an IP from the ban list
@@ -161,11 +158,8 @@ public class IpBanCommand {
             return 0;
         }
 
-        WhitelistManager.ModifyResult result = this.manager.removeIp(source, parsed.get());
-        if (result != WhitelistManager.ModifyResult.ERROR) {
-            return 1;
-        }
-        return 0;
+        this.manager.runAsync(() -> this.manager.removeIp(source, parsed.get()));
+        return 1;
     }
 
     // Lists all banned IPs
@@ -200,21 +194,10 @@ public class IpBanCommand {
             return 0;
         }
 
-        synchronized (this.manager.getIpBanLock()) {
-            if (this.manager.loadIpList(list)) {
-                source.sendMessage(Component.text("IP ban list reloaded"));
-
-                // Scan connected players and disconnect matching players who got banned in the reloaded file
-                this.manager.kickIpBannedPlayers();
-                return 1;
-            } else {
-                source.sendMessage(
-                    Component.text(
-                        "IP ban list reload failed, see console for details"
-                    )
-                );
-                return 0;
-            }
+        if (this.manager.reloadIpBansAndKick(source)) {
+            return 1;
+        } else {
+            return 0;
         }
     }
 }
