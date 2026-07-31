@@ -6,10 +6,10 @@ import java.nio.file.Path;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 
-import java.util.function.Supplier;
 import com.google.common.collect.Maps;
 
 import me.fallenbreath.velocitywhitelist.IdentifyMode;
@@ -21,6 +21,7 @@ public class Configuration {
     public static final String DEFAULT_WHITELIST_KICK_MESSAGE = "You are not in the whitelist!";
     public static final String DEFAULT_BLACKLIST_KICK_MESSAGE = "You are banned from the server!";
     public static final String DEFAULT_IPBAN_KICK_MESSAGE = "Your IP address is banned from the server!";
+    public static final String DEFAULT_MAINTENANCE_KICK_MESSAGE = "<red>Server is currently in maintenance mode due to a configuration error. Please contact the administrator.</red>";
 
     // Bundles every field derived from a single load or reload so it can be published as one unit
     private static final class Snapshot {
@@ -173,5 +174,14 @@ public class Configuration {
             return (String) message;
         }
         return DEFAULT_IPBAN_KICK_MESSAGE;
+    }
+
+    // Retrieves the kick message displayed to players when the plugin is in fail-close maintenance mode
+    public String getMaintenanceKickMessage() {
+        Object message = this.snapshot.options.get("maintenance_kick_message");
+        if (message instanceof String) {
+            return (String) message;
+        }
+        return DEFAULT_MAINTENANCE_KICK_MESSAGE;
     }
 }
