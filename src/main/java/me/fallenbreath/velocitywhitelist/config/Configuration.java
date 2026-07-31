@@ -74,7 +74,6 @@ public class Configuration {
         if (loadedOptions != null) {
             stagedOptions.putAll(loadedOptions);
         }
-        stagedOptions = this.migrator.migrate(stagedOptions);
         stagedOptions = Collections.unmodifiableMap(stagedOptions);
 
         IdentifyMode identifyMode = makeIdentifyMode(
@@ -88,6 +87,7 @@ public class Configuration {
 
     // Reads the configuration file from disk and loads it into memory
     public void reload() throws IOException {
+        this.migrator.migrateIfNeeded();
         String content = Files.readString(this.configFilePath);
         this.load(content);
     }

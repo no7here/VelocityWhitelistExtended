@@ -151,7 +151,7 @@ public class VelocityWhitelistPlugin {
         }
 
         try {
-            this.config.load(Files.readString(file.toPath()));
+            this.config.reload();
         } catch (Exception e) {
             this.logger.error("Read config failed", e);
             return false;
