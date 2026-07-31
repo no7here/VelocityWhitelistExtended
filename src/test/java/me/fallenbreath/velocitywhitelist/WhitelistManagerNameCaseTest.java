@@ -58,6 +58,7 @@ class WhitelistManagerNameCaseTest {
         when(server.getPlayer("steve")).thenReturn(Optional.of(onlinePlayer));
 
         WhitelistManager manager = new WhitelistManager(
+            new Object(),
             logger,
             config,
             tempDir,
