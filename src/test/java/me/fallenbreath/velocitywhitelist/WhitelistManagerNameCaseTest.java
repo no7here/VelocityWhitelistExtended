@@ -57,6 +57,15 @@ class WhitelistManagerNameCaseTest {
         when(onlinePlayer.getGameProfile()).thenReturn(canonicalProfile);
         when(server.getPlayer("steve")).thenReturn(Optional.of(onlinePlayer));
 
+        com.velocitypowered.api.scheduler.Scheduler scheduler = mock(com.velocitypowered.api.scheduler.Scheduler.class);
+        when(server.getScheduler()).thenReturn(scheduler);
+        com.velocitypowered.api.scheduler.Scheduler.TaskBuilder taskBuilder = mock(com.velocitypowered.api.scheduler.Scheduler.TaskBuilder.class);
+        when(scheduler.buildTask(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(Runnable.class))).thenAnswer(inv -> {
+            Runnable r = inv.getArgument(1);
+            r.run();
+            return taskBuilder;
+        });
+
         WhitelistManager manager = new WhitelistManager(
             mock(VelocityWhitelistPlugin.class),
             logger,

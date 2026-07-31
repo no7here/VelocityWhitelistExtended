@@ -121,7 +121,12 @@ public class WhitelistManager {
         boolean whitelistSuccess = this.loadOneList(this.whitelist);
         boolean blacklistSuccess = this.loadOneList(this.blacklist);
         boolean ipBanSuccess = this.loadIpList(this.ipBanList);
-        return whitelistSuccess && blacklistSuccess && ipBanSuccess;
+
+        boolean whitelistOk = !this.config.isWhitelistEnabled() || whitelistSuccess;
+        boolean blacklistOk = !this.config.isBlacklistEnabled() || blacklistSuccess;
+        boolean ipBanOk = !this.config.isIpBanEnabled() || ipBanSuccess;
+
+        return whitelistOk && blacklistOk && ipBanOk;
     }
 
     private boolean isPlayerInList(GameProfile profile, PlayerList list) {
@@ -653,11 +658,8 @@ public class WhitelistManager {
                 return ModifyResult.NO_CHANGE;
             }
         }
-        if (success) {
-            this.kickIpBannedPlayers();
-            return ModifyResult.SUCCESS;
-        }
-        return ModifyResult.ERROR;
+        this.kickIpBannedPlayers();
+        return ModifyResult.SUCCESS;
     }
 
     // Removes an IP from the ban list and saves it, matching removePlayer()'s mutate/save/rollback shape
@@ -701,7 +703,10 @@ public class WhitelistManager {
         GameProfile profile = player.getGameProfile();
 
         if (!this.plugin.isActivated()) {
-            event.setResult(ResultedEvent.ComponentResult.denied(Component.text("Server is currently in maintenance mode due to a configuration error. Please contact the administrator.")));
+            Component message = MiniMessage.miniMessage().deserialize(
+                this.config.getMaintenanceKickMessage()
+            );
+            event.setResult(ResultedEvent.ComponentResult.denied(message));
             this.logger.info("Denied login for {} because the plugin is in fail-close mode due to configuration errors.", profile.getName());
             return;
         }

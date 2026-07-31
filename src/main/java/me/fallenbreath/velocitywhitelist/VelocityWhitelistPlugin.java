@@ -39,23 +39,30 @@ public class VelocityWhitelistPlugin {
     private final Path configFilePath;
     private final Configuration config;
     private final WhitelistManager whitelistManager;
-    private boolean activated = false;
+    private volatile boolean activated = false;
+    private boolean firstLoad = true;
 
     public boolean isActivated() {
         return this.activated;
     }
 
     public void setActivated(boolean activated) {
+        boolean wasActivated = this.activated;
         this.activated = activated;
-        if (!activated) {
+        
+        if (activated && !wasActivated && !this.firstLoad) {
+            this.logger.info("Velocity Whitelist has successfully loaded and exited fail-close mode.");
+        } else if (!activated && (wasActivated || this.firstLoad)) {
             this.logger.error("=========================================");
             this.logger.error("VELOCITY WHITELIST FAILED TO LOAD CORRECTLY");
             this.logger.error("THE PLUGIN IS NOW IN FAIL-CLOSE MODE.");
             this.logger.error("ALL PLAYERS WILL BE BLOCKED FROM JOINING.");
             this.logger.error("PLEASE CHECK THE ERRORS ABOVE, FIX THE CONFIG OR LISTS,");
-            this.logger.error("AND RUN /velocitywhitelist reload TO RECOVER.");
+            this.logger.error("AND RUN /velocitywhitelist reload FROM THE CONSOLE TO RECOVER.");
             this.logger.error("=========================================");
         }
+        
+        this.firstLoad = false;
     }
 
     // Initialises the plugin with injected dependencies
