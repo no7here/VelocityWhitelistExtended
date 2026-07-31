@@ -66,14 +66,14 @@ class WhitelistManagerNameCaseTest {
         assertTrue(manager.loadLists());
 
         CommandSource source = mock(CommandSource.class);
-        boolean added = manager.addPlayer(
+        WhitelistManager.ModifyResult result = manager.addPlayer(
             source,
             manager.getWhitelist(),
             "steve",
             null
         );
 
-        assertTrue(added, "adding the player should succeed");
+        assertTrue(result == WhitelistManager.ModifyResult.SUCCESS, "adding the player should succeed");
         assertTrue(
             manager.getWhitelist().checkPlayerName("Steve"),
             "the whitelist should store the resolved canonical-case name so a real login (profile.getName() == \"Steve\") actually matches"

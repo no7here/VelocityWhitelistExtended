@@ -139,7 +139,11 @@ public class IpBanCommand {
             return 0;
         }
 
-        return this.manager.addIp(source, parsed.get()) ? 1 : 0;
+        WhitelistManager.ModifyResult result = this.manager.addIp(source, parsed.get());
+        if (result != WhitelistManager.ModifyResult.ERROR) {
+            return 1;
+        }
+        return 0;
     }
 
     // Removes an IP from the ban list
@@ -157,7 +161,11 @@ public class IpBanCommand {
             return 0;
         }
 
-        return this.manager.removeIp(source, parsed.get()) ? 1 : 0;
+        WhitelistManager.ModifyResult result = this.manager.removeIp(source, parsed.get());
+        if (result != WhitelistManager.ModifyResult.ERROR) {
+            return 1;
+        }
+        return 0;
     }
 
     // Lists all banned IPs
@@ -179,7 +187,7 @@ public class IpBanCommand {
                 String.format("Banned IPs: %s", String.join(", ", ips))
             )
         );
-        return ips.size();
+        return 1;
     }
 
     // Reloads the IP ban list

@@ -45,14 +45,14 @@ public class WhitelistCommand {
             .executes(c -> showListStatus(c.getSource(), list))
             .then(
                 literal("add").then(
-                    argument("name", word()).executes(c ->
-                        addPlayer(c.getSource(), list, getString(c, "name"), postAddHook)
+                    argument("uuid", word()).executes(c ->
+                        addPlayer(c.getSource(), list, getString(c, "uuid"), postAddHook)
                     )
                 )
             )
             .then(
                 literal("remove").then(
-                    argument("name", word())
+                    argument("uuid", word())
                         .suggests((c, sb) ->
                             suggestMatching(
                                 this.manager.getValuesForRemovalSuggestion(
@@ -65,7 +65,7 @@ public class WhitelistCommand {
                             removePlayer(
                                 c.getSource(),
                                 list,
-                                getString(c, "name")
+                                getString(c, "uuid")
                             )
                         )
                 )
@@ -162,7 +162,8 @@ public class WhitelistCommand {
             return 0;
         }
 
-        if (this.manager.addPlayer(source, list, playerName, postAddHook)) {
+        WhitelistManager.ModifyResult result = this.manager.addPlayer(source, list, playerName, postAddHook);
+        if (result != WhitelistManager.ModifyResult.ERROR) {
             return 1;
         }
         return 0;
@@ -183,7 +184,8 @@ public class WhitelistCommand {
             return 0;
         }
 
-        if (this.manager.removePlayer(source, list, playerName)) {
+        WhitelistManager.ModifyResult result = this.manager.removePlayer(source, list, playerName);
+        if (result != WhitelistManager.ModifyResult.ERROR) {
             return 1;
         }
         return 0;
@@ -215,7 +217,7 @@ public class WhitelistCommand {
                 )
             )
         );
-        return players.size();
+        return 1;
     }
 
     // Reloads the specified list from configuration

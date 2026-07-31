@@ -18,6 +18,10 @@ class MojangAPITest {
 
     private static final int STUB_PORT = 18765;
 
+    static {
+        System.setProperty("velocitywhitelist.mojang.accountserver", "http://127.0.0.1:" + STUB_PORT + "/");
+    }
+
     private HttpServer server;
 
     // Clean up after each test execution
