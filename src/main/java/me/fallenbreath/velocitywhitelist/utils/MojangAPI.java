@@ -129,7 +129,7 @@ public class MojangAPI {
                 return Optional.empty();
             }
 
-            if (obj == null || Strings.isNullOrEmpty(obj.id)) {
+            if (Strings.isNullOrEmpty(obj.id)) {
                 return Optional.empty();
             }
             var ret = UuidUtils.tryParseUuid(obj.id).map(uuid ->

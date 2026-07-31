@@ -94,11 +94,10 @@ public class WhitelistManager {
     }
 
     public boolean loadLists() {
-        boolean allSuccess = true;
-        allSuccess &= this.loadOneList(this.whitelist);
-        allSuccess &= this.loadOneList(this.blacklist);
-        allSuccess &= this.loadIpList(this.ipBanList);
-        return allSuccess;
+        boolean whitelistSuccess = this.loadOneList(this.whitelist);
+        boolean blacklistSuccess = this.loadOneList(this.blacklist);
+        boolean ipBanSuccess = this.loadIpList(this.ipBanList);
+        return whitelistSuccess && blacklistSuccess && ipBanSuccess;
     }
 
     private boolean isPlayerInList(GameProfile profile, PlayerList list) {
