@@ -625,7 +625,6 @@ public class WhitelistManager {
 
     // Adds an IP to the ban list and saves it, matching addPlayer()'s mutate/save/rollback shape
     public ModifyResult addIp(CommandSource source, String ip) {
-        boolean success = false;
         synchronized (this.ipBanLock) {
             if (this.ipBanList.addIp(ip)) {
                 if (
@@ -645,7 +644,6 @@ public class WhitelistManager {
                             String.format("Added IP %s to the IP ban list", ip)
                         )
                     );
-                    success = true;
                 } else {
                     return ModifyResult.ERROR;
                 }
