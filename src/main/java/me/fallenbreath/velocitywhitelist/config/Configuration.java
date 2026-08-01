@@ -178,10 +178,7 @@ public class Configuration {
 
     // Retrieves the kick message displayed to players when the plugin is in fail-close maintenance mode
     public String getMaintenanceKickMessage() {
-        Object message = this.snapshot.options.get("maintenance_kick_message");
-        if (message instanceof String) {
-            return (String) message;
-        }
+        // This message is intentionally not customisable to avoid configuration errors breaking the fail-close maintenance message itself.
         return DEFAULT_MAINTENANCE_KICK_MESSAGE;
     }
 }

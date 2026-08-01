@@ -1,6 +1,7 @@
 package me.fallenbreath.velocitywhitelist.config;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 
@@ -53,13 +54,13 @@ final class ConfigMigrator {
     // Migrates the configuration file to the current version if necessary
     @SuppressWarnings("unchecked")
     void migrateIfNeeded() {
-        if (!java.nio.file.Files.exists(this.configFilePath)) {
+        if (!Files.exists(this.configFilePath)) {
             return;
         }
 
         String content;
         try {
-            content = java.nio.file.Files.readString(this.configFilePath);
+            content = Files.readString(this.configFilePath);
         } catch (IOException e) {
             this.logger.error("Failed to read configuration file for migration check", e);
             return;
@@ -97,7 +98,7 @@ final class ConfigMigrator {
 
         // Backup legacy config
         try {
-            java.nio.file.Path backupPath = this.configFilePath.resolveSibling("config.yml.v" + version + ".bak");
+            Path backupPath = this.configFilePath.resolveSibling("config.yml.v" + version + ".bak");
             FileUtils.safeWrite(backupPath, content);
             this.logger.info("Created a backup of the legacy configuration at {}", backupPath.getFileName());
         } catch (IOException e) {
@@ -184,7 +185,7 @@ final class ConfigMigrator {
         }
 
         if (!regexSuccess) {
-            this.logger.warn("A complex configuration required a fallback migration. Your comments may have been removed, please check your new config (a backup is saved in config.yml.v1.bak).");
+            this.logger.warn("A complex configuration required a fallback migration. Your comments may have been removed, please check your new config (a backup is saved in config.yml.v{}.bak).", version);
             Map<String, Object> newOptions = fallbackMapMigration(options);
             try {
                 FileUtils.dumpYaml(this.configFilePath, newOptions);
@@ -196,7 +197,7 @@ final class ConfigMigrator {
     }
 
     private Map<String, Object> fallbackMapMigration(Map<String, Object> options) {
-        Map<String, Object> newOptions = com.google.common.collect.Maps.newLinkedHashMap();
+        Map<String, Object> newOptions = Maps.newLinkedHashMap();
         newOptions.put("version", CONFIG_VERSION);
         newOptions.put(
             "identify_mode",
