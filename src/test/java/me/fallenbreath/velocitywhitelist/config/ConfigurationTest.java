@@ -159,4 +159,55 @@ class ConfigurationTest {
             "blacklist_on_ipban_join must stay off when the proxy isn't in online mode"
         );
     }
+
+    // Regression test for data loss edge cases in config migration
+    @Test
+    void migrate_dataPreservation_onPartiallyMigratedConfig(@TempDir Path tempDir) {
+        Configuration config = new Configuration(
+            logger,
+            tempDir.resolve("config.yml"),
+            () -> true
+        );
+
+        // A v1 config that has new keys added manually but is missing others
+        try {
+            java.nio.file.Files.writeString(
+                tempDir.resolve("config.yml"),
+                "version: 1\nidentify_mode: uuid\nkick_message: Bye\nblacklist_kick_message: MY CUSTOM BAN MSG\nipban_enabled: false\n"
+            );
+            assertDoesNotThrow(() -> config.reload());
+
+            // Assert that the runtime object retained custom data
+            org.junit.jupiter.api.Assertions.assertEquals("MY CUSTOM BAN MSG", config.getBlacklistKickMessage());
+            org.junit.jupiter.api.Assertions.assertFalse(config.isIpBanEnabled());
+            org.junit.jupiter.api.Assertions.assertEquals("Bye", config.getWhitelistKickMessage());
+        } catch (java.io.IOException e) {
+            org.junit.jupiter.api.Assertions.fail(e);
+        }
+    }
+
+    @Test
+    void migrate_legacyV0Fallback_bypassesMapMigration(@TempDir Path tempDir) {
+        Configuration config = new Configuration(
+            logger,
+            tempDir.resolve("config.yml"),
+            () -> true
+        );
+
+        // A v0 config with no version key and no enabled key
+        try {
+            java.nio.file.Files.writeString(
+                tempDir.resolve("config.yml"),
+                "# ancient config\nkick_message: Nope\n"
+            );
+            assertDoesNotThrow(() -> config.reload());
+
+            String newContent = java.nio.file.Files.readString(tempDir.resolve("config.yml"));
+            assertTrue(newContent.contains("# ancient config"), "Comments should be preserved");
+            assertTrue(newContent.contains("version: 2"), "Version 2 should be injected");
+            assertTrue(newContent.contains("whitelist_enabled: true"), "whitelist_enabled should be injected");
+        } catch (java.io.IOException e) {
+            org.junit.jupiter.api.Assertions.fail(e);
+        }
+    }
 }
