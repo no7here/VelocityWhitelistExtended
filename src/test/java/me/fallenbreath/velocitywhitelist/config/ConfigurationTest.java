@@ -10,7 +10,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -81,10 +84,10 @@ class ConfigurationTest {
 
         // Version detection must not only accept a YAML number for version but also a hand-quoted string, and an already-current config must not be treated as legacy and re-migrated on every load
         try {
-            java.nio.file.Files.writeString(tempDir.resolve("config.yml"), "version: \"2\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
+            Files.writeString(tempDir.resolve("config.yml"), "version: \"2\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
             config.reload();
-        } catch (java.io.IOException e) {
-            org.junit.jupiter.api.Assertions.fail(e);
+        } catch (IOException e) {
+            Assertions.fail(e);
         }
 
         verify(logger, never()).warn(
@@ -107,10 +110,10 @@ class ConfigurationTest {
 
         // A digit-only quoted version larger than Integer.MAX_VALUE still matches regex check, so it is treated as an already-current version
         try {
-            java.nio.file.Files.writeString(tempDir.resolve("config.yml"), "version: \"99999999999999999999\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
+            Files.writeString(tempDir.resolve("config.yml"), "version: \"99999999999999999999\"\nidentify_mode: uuid\nwhitelist_enabled: true\nblacklist_enabled: true\nipban_enabled: true\n");
             assertDoesNotThrow(() -> config.reload());
-        } catch (java.io.IOException e) {
-            org.junit.jupiter.api.Assertions.fail(e);
+        } catch (IOException e) {
+            Assertions.fail(e);
         }
 
         verify(logger, never()).warn(
@@ -171,18 +174,18 @@ class ConfigurationTest {
 
         // A v1 config that has new keys added manually but is missing others
         try {
-            java.nio.file.Files.writeString(
+            Files.writeString(
                 tempDir.resolve("config.yml"),
                 "version: 1\nidentify_mode: uuid\nkick_message: Bye\nblacklist_kick_message: MY CUSTOM BAN MSG\nipban_enabled: false\n"
             );
             assertDoesNotThrow(() -> config.reload());
 
             // Assert that the runtime object retained custom data
-            org.junit.jupiter.api.Assertions.assertEquals("MY CUSTOM BAN MSG", config.getBlacklistKickMessage());
-            org.junit.jupiter.api.Assertions.assertFalse(config.isIpBanEnabled());
-            org.junit.jupiter.api.Assertions.assertEquals("Bye", config.getWhitelistKickMessage());
-        } catch (java.io.IOException e) {
-            org.junit.jupiter.api.Assertions.fail(e);
+            Assertions.assertEquals("MY CUSTOM BAN MSG", config.getBlacklistKickMessage());
+            Assertions.assertFalse(config.isIpBanEnabled());
+            Assertions.assertEquals("Bye", config.getWhitelistKickMessage());
+        } catch (IOException e) {
+            Assertions.fail(e);
         }
     }
 
@@ -196,18 +199,18 @@ class ConfigurationTest {
 
         // A v0 config with no version key and no enabled key
         try {
-            java.nio.file.Files.writeString(
+            Files.writeString(
                 tempDir.resolve("config.yml"),
                 "# ancient config\nkick_message: Nope\n"
             );
             assertDoesNotThrow(() -> config.reload());
 
-            String newContent = java.nio.file.Files.readString(tempDir.resolve("config.yml"));
+            String newContent = Files.readString(tempDir.resolve("config.yml"));
             assertTrue(newContent.contains("# ancient config"), "Comments should be preserved");
             assertTrue(newContent.contains("version: 2"), "Version 2 should be injected");
             assertTrue(newContent.contains("whitelist_enabled: true"), "whitelist_enabled should be injected");
-        } catch (java.io.IOException e) {
-            org.junit.jupiter.api.Assertions.fail(e);
+        } catch (IOException e) {
+            Assertions.fail(e);
         }
     }
 }

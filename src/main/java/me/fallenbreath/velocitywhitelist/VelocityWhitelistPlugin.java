@@ -46,7 +46,7 @@ public class VelocityWhitelistPlugin {
         return this.activated;
     }
 
-    public void setActivated(boolean activated) {
+    public synchronized void setActivated(boolean activated) {
         boolean wasActivated = this.activated;
         this.activated = activated;
         
