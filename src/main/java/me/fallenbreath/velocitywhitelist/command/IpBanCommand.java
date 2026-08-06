@@ -139,8 +139,8 @@ public class IpBanCommand {
             return 0;
         }
 
-        WhitelistManager.ModifyResult result = this.manager.addIp(source, parsed.get());
-        return result != WhitelistManager.ModifyResult.ERROR ? 1 : 0;
+        this.manager.runAsync(() -> this.manager.addIp(source, parsed.get()));
+        return 1;
     }
 
     // Removes an IP from the ban list
@@ -158,8 +158,8 @@ public class IpBanCommand {
             return 0;
         }
 
-        WhitelistManager.ModifyResult result = this.manager.removeIp(source, parsed.get());
-        return result != WhitelistManager.ModifyResult.ERROR ? 1 : 0;
+        this.manager.runAsync(() -> this.manager.removeIp(source, parsed.get()));
+        return 1;
     }
 
     // Lists all banned IPs
