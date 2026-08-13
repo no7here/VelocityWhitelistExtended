@@ -18,10 +18,12 @@ import org.slf4j.Logger;
 
 import java.util.function.Supplier;
 import com.google.common.collect.HashMultimap;
+import com.google.common.collect.HashMultiset;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Multiset;
 import com.google.common.collect.Sets;
 
 import me.fallenbreath.velocitywhitelist.utils.FileUtils;
@@ -34,6 +36,8 @@ public class PlayerList implements YamlStoredList<PlayerList> {
     private final Map<UUID, @Nullable String> uuids = Maps.newLinkedHashMap();
     // Maps a normalised name to every spelling of it stored, a multimap because an older file can hold both "Steve" and "steve" and discarding either would throw away a ban
     private final Multimap<String, String> nameIndex = HashMultimap.create();
+    // Tracks the name labels attached to uuid entries so a deny-list lookup by name stays O(1) on the login path, a multiset because two uuid entries can carry the same label once a name changes hands
+    private final Multiset<String> labelIndex = HashMultiset.create();
     private final String name;
     private final Path filePath;
     private final Supplier<Boolean> configEnableGetter;
@@ -98,6 +102,26 @@ public class PlayerList implements YamlStoredList<PlayerList> {
     public boolean checkPlayerNameIgnoreCase(String name) {
         synchronized (this.lock) {
             return this.nameIndex.containsKey(normaliseName(name));
+        }
+    }
+
+    // Checks whether any identifier held for a profile appears in this list, as a uuid key, a name entry or the name label on a uuid entry, deliberately over-matching since this backs the deny list only
+    public boolean checkAnyIdentifier(
+        @Nullable UUID uuid,
+        @Nullable String name
+    ) {
+        synchronized (this.lock) {
+            if (uuid != null && this.uuids.containsKey(uuid)) {
+                return true;
+            }
+            if (name == null) {
+                return false;
+            }
+            String normalised = normaliseName(name);
+            return (
+                this.nameIndex.containsKey(normalised) ||
+                this.labelIndex.contains(normalised)
+            );
         }
     }
 
@@ -200,7 +224,13 @@ public class PlayerList implements YamlStoredList<PlayerList> {
     @ApiStatus.Internal
     public void putPlayerUUID(UUID uuid, @Nullable String playerName) {
         synchronized (this.lock) {
-            this.uuids.put(uuid, playerName);
+            String previousName = this.uuids.put(uuid, playerName);
+            if (previousName != null) {
+                this.labelIndex.remove(normaliseName(previousName));
+            }
+            if (playerName != null) {
+                this.labelIndex.add(normaliseName(playerName));
+            }
         }
     }
 
@@ -212,7 +242,12 @@ public class PlayerList implements YamlStoredList<PlayerList> {
     @ApiStatus.Internal
     public @Nullable String removePlayerUUID(UUID uuid) {
         synchronized (this.lock) {
-            return this.uuids.remove(uuid);
+            String removedName = this.uuids.remove(uuid);
+            if (removedName != null) {
+                // Removes a single occurrence so a label shared with another uuid entry keeps matching
+                this.labelIndex.remove(normaliseName(removedName));
+            }
+            return removedName;
         }
     }
 
@@ -239,17 +274,23 @@ public class PlayerList implements YamlStoredList<PlayerList> {
             this.names.addAll(newList.names);
             this.uuids.clear();
             this.uuids.putAll(newList.uuids);
-            // Reload swaps state through here rather than load() so the index must be rebuilt on this path too, or they would keep describing the previous file
-            this.rebuildNameIndex();
+            // Reload swaps state through here rather than load() so the indexes must be rebuilt on this path too, or they would keep describing the previous file
+            this.rebuildIndexes();
             this.loadOk = true;
         }
     }
 
-    // Rebuilds the case-insensitive name index from the stored names. Must be called while holding the lock.
-    private void rebuildNameIndex() {
+    // Rebuilds both normalised indexes from the stored entries. Must be called while holding the lock.
+    private void rebuildIndexes() {
         this.nameIndex.clear();
         for (String storedName : this.names) {
             this.nameIndex.put(normaliseName(storedName), storedName);
+        }
+        this.labelIndex.clear();
+        for (String label : this.uuids.values()) {
+            if (label != null) {
+                this.labelIndex.add(normaliseName(label));
+            }
         }
     }
 
@@ -290,6 +331,7 @@ public class PlayerList implements YamlStoredList<PlayerList> {
             this.names.clear();
             this.nameIndex.clear();
             this.uuids.clear();
+            this.labelIndex.clear();
             int skipped = 0;
 
             // Extract the names value if options is not null, a present but non-list value means the file is structurally corrupt so fail the whole load so a reload keeps the previous state instead of silently replacing the list with an empty one
@@ -370,7 +412,7 @@ public class PlayerList implements YamlStoredList<PlayerList> {
                 }
             }
 
-            this.rebuildNameIndex();
+            this.rebuildIndexes();
             this.warnAboutCaseCollisions(logger);
 
             this.loadOk = true;

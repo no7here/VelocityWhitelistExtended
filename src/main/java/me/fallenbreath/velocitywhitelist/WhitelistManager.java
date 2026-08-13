@@ -142,8 +142,12 @@ public class WhitelistManager {
         return this.isPlayerInList(profile, this.whitelist);
     }
 
+    // Matches a deny list on every identifier held for an entry, since a missed match silently admits a banned account while an extra match only inconveniences a legitimate one
     public boolean isPlayerInBlacklist(GameProfile profile) {
-        return this.isPlayerInList(profile, this.blacklist);
+        return this.blacklist.checkAnyIdentifier(
+            profile.getId(),
+            profile.getName()
+        );
     }
 
     private static String pretty(@NotNull UUID uuid, @Nullable String name) {
