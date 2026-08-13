@@ -51,6 +51,7 @@ public class Configuration {
     private final Path configFilePath;
     private final ConfigMigrator migrator;
     private final ConfigWarnings warnings;
+    private final Supplier<Boolean> proxyOnlineModeGetter;
 
     // Initialises the configuration manager with the required dependencies
     public Configuration(
@@ -62,6 +63,12 @@ public class Configuration {
         this.configFilePath = configFilePath;
         this.migrator = new ConfigMigrator(logger, configFilePath);
         this.warnings = new ConfigWarnings(logger, proxyOnlineModeGetter);
+        this.proxyOnlineModeGetter = proxyOnlineModeGetter;
+    }
+
+    // Checks whether the proxy itself is running in online mode, read lazily through the supplier since the plugin's objects are constructed before the proxy has initialised
+    public boolean isProxyOnlineMode() {
+        return this.proxyOnlineModeGetter.get();
     }
 
     // Parses the YAML content and updates the configuration state safely
@@ -100,7 +107,10 @@ public class Configuration {
         Object mode = options.get("identify_mode");
         if (mode instanceof String) {
             try {
-                return IdentifyMode.valueOf(((String) mode).toUpperCase());
+                // Upper-cases with Locale.ROOT since a Turkish default locale turns "uuid" into "UUİD" and the mode would fail to parse
+                return IdentifyMode.valueOf(
+                    ((String) mode).toUpperCase(Locale.ROOT)
+                );
             } catch (IllegalArgumentException e) {
                 logger.warn(
                     "Invalid identify mode: {}, use default value {}",

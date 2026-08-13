@@ -130,10 +130,12 @@ public class WhitelistManager {
         return whitelistOk && blacklistOk && ipBanOk;
     }
 
-    // Matches an allow list on the single identifier identify_mode designates
+    // Matches an allow list on the single identifier identify_mode designates, ignoring capitalisation only on an online-mode proxy where Mojang guarantees "Steve" and "steve" cannot be two accounts
     private boolean isPlayerInList(GameProfile profile, PlayerList list) {
         return switch (this.config.getIdentifyMode()) {
-            case NAME -> list.checkPlayerName(profile.getName());
+            case NAME -> this.config.isProxyOnlineMode()
+                ? list.checkPlayerNameIgnoreCase(profile.getName())
+                : list.checkPlayerName(profile.getName());
             case UUID -> list.checkPlayerUUID(profile.getId());
         };
     }
