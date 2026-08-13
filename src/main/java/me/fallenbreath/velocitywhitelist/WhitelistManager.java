@@ -12,6 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.event.ResultedEvent;
@@ -129,6 +130,7 @@ public class WhitelistManager {
         return whitelistOk && blacklistOk && ipBanOk;
     }
 
+    // Matches an allow list on the single identifier identify_mode designates
     private boolean isPlayerInList(GameProfile profile, PlayerList list) {
         return switch (this.config.getIdentifyMode()) {
             case NAME -> list.checkPlayerName(profile.getName());
@@ -456,11 +458,15 @@ public class WhitelistManager {
             case NAME -> {
                 String playerName = target.playerName();
                 synchronized (this.saveLock) {
-                    if (list.removePlayerName(playerName)) {
+                    // Case-insensitive matching means one removal can clear several stored spellings, so the rollback restores all of them rather than re-adding a single string
+                    ImmutableList<String> removed = list.removePlayerName(
+                        playerName
+                    );
+                    if (!removed.isEmpty()) {
                         if (
                             this.saveOrRollback(
                                 list,
-                                () -> list.addPlayerName(playerName),
+                                () -> list.restorePlayerNames(removed),
                                 () ->
                                     source.sendMessage(
                                         Component.text(
@@ -476,7 +482,7 @@ public class WhitelistManager {
                                 Component.text(
                                     String.format(
                                         "Removed player %s from the %s",
-                                        playerName,
+                                        String.join(", ", removed),
                                         list.getName()
                                     )
                                 )
