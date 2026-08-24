@@ -198,6 +198,36 @@ class WhitelistManagerDenyListRemovalTest {
         assertTrue(blacklist.getPlayerUuidMappingEntries().isEmpty());
     }
 
+    // Checks a removal by raw uuid, where the offline player supplies no name, still clears the plain name entry that would otherwise go on banning them
+    @Test
+    void removesByUuid_alsoClearsTheParallelNameEntry(@TempDir Path tempDir)
+        throws Exception {
+        WhitelistManager manager = managerWith(
+            tempDir,
+            "uuid",
+            "names:",
+            "  - Griefer",
+            "uuids:",
+            "  - " + LISTED_UUID + ": Griefer"
+        );
+        PlayerList blacklist = manager.getBlacklist();
+
+        assertEquals(
+            WhitelistManager.ModifyResult.SUCCESS,
+            manager.removePlayer(
+                mock(CommandSource.class),
+                blacklist,
+                LISTED_UUID.toString()
+            )
+        );
+        assertFalse(
+            manager.isPlayerInBlacklist(profile(UUID.randomUUID(), "Griefer")),
+            "the command reported success, so nothing may still be banning this player"
+        );
+        assertTrue(blacklist.getPlayerNames().isEmpty());
+        assertTrue(blacklist.getPlayerUuidMappingEntries().isEmpty());
+    }
+
     // Checks an unlisted player still reports no change rather than being swept up by the widened removal
     @Test
     void reportsNoChangeForAnUnlistedPlayer(@TempDir Path tempDir)

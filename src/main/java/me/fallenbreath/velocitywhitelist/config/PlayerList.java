@@ -225,15 +225,19 @@ public class PlayerList implements YamlStoredList<PlayerList> {
         synchronized (this.lock) {
             List<Map.Entry<UUID, @Nullable String>> uuidsToRemove =
                 Lists.newArrayList();
+            String sweepName = name;
             if (uuid != null && this.uuids.containsKey(uuid)) {
-                uuidsToRemove.add(
-                    Maps.immutableEntry(uuid, this.uuids.get(uuid))
-                );
+                String label = this.uuids.get(uuid);
+                uuidsToRemove.add(Maps.immutableEntry(uuid, label));
+                // Falls back to the matched entry's own label, since a removal by raw uuid for an offline player carries no name and would otherwise leave a same-named entry behind still banning them
+                if (sweepName == null) {
+                    sweepName = label;
+                }
             }
 
             ImmutableList<String> namesToRemove = ImmutableList.of();
-            if (name != null) {
-                String normalised = normaliseName(name);
+            if (sweepName != null) {
+                String normalised = normaliseName(sweepName);
                 // Copies out of the multimap's live view before mutating anything below
                 namesToRemove = ImmutableList.copyOf(
                     this.nameIndex.get(normalised)
@@ -396,13 +400,13 @@ public class PlayerList implements YamlStoredList<PlayerList> {
         }
     }
 
-    // Reports names differing only by capitalisation, which are kept rather than merged but now match as one entry and are removed together. Must be called while holding the lock.
+    // Reports names differing only by capitalisation, which are kept rather than merged and behave as one entry only where the list folds name case. Must be called while holding the lock.
     private void warnAboutCaseCollisions(Logger logger) {
         for (String normalised : this.nameIndex.keySet()) {
             Collection<String> spellings = this.nameIndex.get(normalised);
             if (spellings.size() > 1) {
                 logger.warn(
-                    "{}: {} differ only by capitalisation. They are all kept, but they now match as one entry and will be removed together",
+                    "{}: {} differ only by capitalisation. They are all kept. A deny list matches them as one entry and removes them together; an allow list does so only when the proxy is in online mode, and otherwise keeps treating them as separate accounts",
                     this.name,
                     String.join(" / ", spellings)
                 );

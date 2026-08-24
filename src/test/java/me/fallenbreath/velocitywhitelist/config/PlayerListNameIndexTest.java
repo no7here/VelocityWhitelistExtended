@@ -255,6 +255,46 @@ class PlayerListNameIndexTest {
         assertTrue(list.checkAnyIdentifier(null, "GRIEFER"));
     }
 
+    // Checks a removal naming only a uuid still sweeps that entry's label, the caller having no name to pass when the banned player is offline
+    @Test
+    void removeAnyIdentifier_sweepsTheMatchedEntrysOwnLabel(
+        @TempDir Path tempDir
+    ) throws Exception {
+        UUID labelled = UUID.fromString("11111111-2222-3333-4444-555555555555");
+        UUID sibling = UUID.fromString("99999999-8888-7777-6666-555555555555");
+
+        PlayerList list = loadedFrom(tempDir, LOGGER, "Griefer");
+        list.putPlayerUUID(labelled, "Griefer");
+        list.putPlayerUUID(sibling, "griefer");
+
+        var removed = list.removeAnyIdentifier(labelled, null);
+
+        assertIterableEquals(List.of("Griefer"), removed.names());
+        assertEquals(2, removed.uuids().size());
+        assertFalse(
+            list.checkAnyIdentifier(null, "Griefer"),
+            "a name entry left behind would keep banning a player the command reported as removed"
+        );
+        assertFalse(list.checkAnyIdentifier(sibling, null));
+    }
+
+    // Checks the sweep is skipped for a bare uuid entry, which carries no label to widen on
+    @Test
+    void removeAnyIdentifier_byUuid_leavesUnrelatedNamesAlone(
+        @TempDir Path tempDir
+    ) throws Exception {
+        UUID bare = UUID.fromString("11111111-2222-3333-4444-555555555555");
+
+        PlayerList list = loadedFrom(tempDir, LOGGER, "Griefer");
+        list.putPlayerUUID(bare, null);
+
+        var removed = list.removeAnyIdentifier(bare, null);
+
+        assertTrue(removed.names().isEmpty());
+        assertEquals(1, removed.uuids().size());
+        assertTrue(list.checkPlayerName("Griefer"));
+    }
+
     // Checks a bare uuid entry is untouched by a name that matches nothing, the removal widening only as far as the matcher does
     @Test
     void removeAnyIdentifier_leavesUnrelatedEntriesAlone(@TempDir Path tempDir)
