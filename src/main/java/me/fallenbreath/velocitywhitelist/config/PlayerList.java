@@ -197,6 +197,91 @@ public class PlayerList implements YamlStoredList<PlayerList> {
         }
     }
 
+    // Everything a single cross-identifier removal took, kept so a failed save can put it back exactly as it stood
+    public record RemovedIdentifiers(
+        ImmutableList<String> names,
+        ImmutableList<Map.Entry<UUID, @Nullable String>> uuids
+    ) {
+        public boolean isEmpty() {
+            return this.names.isEmpty() && this.uuids.isEmpty();
+        }
+    }
+
+    /**
+     * Removes every identifier this list holds for a profile: the uuid key itself, every stored
+     * spelling of the name and every uuid entry carrying that name as its label.
+     *
+     * Mirrors checkAnyIdentifier so that anything able to make this list match is also something a
+     * removal can lift. Without it a deny-list entry the command cannot reach keeps banning a player
+     * the operator has just been told is not listed.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
+    public RemovedIdentifiers removeAnyIdentifier(
+        @Nullable UUID uuid,
+        @Nullable String name
+    ) {
+        synchronized (this.lock) {
+            List<Map.Entry<UUID, @Nullable String>> uuidsToRemove =
+                Lists.newArrayList();
+            if (uuid != null && this.uuids.containsKey(uuid)) {
+                uuidsToRemove.add(
+                    Maps.immutableEntry(uuid, this.uuids.get(uuid))
+                );
+            }
+
+            ImmutableList<String> namesToRemove = ImmutableList.of();
+            if (name != null) {
+                String normalised = normaliseName(name);
+                // Copies out of the multimap's live view before mutating anything below
+                namesToRemove = ImmutableList.copyOf(
+                    this.nameIndex.get(normalised)
+                );
+                for (Map.Entry<UUID, String> entry : this.uuids.entrySet()) {
+                    // Skips a uuid already collected above so a failed save does not restore it twice
+                    if (
+                        entry.getValue() != null &&
+                        !entry.getKey().equals(uuid) &&
+                        normaliseName(entry.getValue()).equals(normalised)
+                    ) {
+                        uuidsToRemove.add(
+                            Maps.immutableEntry(entry.getKey(), entry.getValue())
+                        );
+                    }
+                }
+            }
+
+            for (String spelling : namesToRemove) {
+                this.names.remove(spelling);
+                this.nameIndex.remove(normaliseName(spelling), spelling);
+            }
+            for (Map.Entry<UUID, @Nullable String> entry : uuidsToRemove) {
+                this.removePlayerUUID(entry.getKey());
+            }
+
+            return new RemovedIdentifiers(
+                namesToRemove,
+                ImmutableList.copyOf(uuidsToRemove)
+            );
+        }
+    }
+
+    /**
+     * Restores everything a cross-identifier removal took, for undoing one whose save failed.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
+    public void restoreIdentifiers(RemovedIdentifiers removed) {
+        synchronized (this.lock) {
+            this.restorePlayerNames(removed.names());
+            for (Map.Entry<UUID, @Nullable String> entry : removed.uuids()) {
+                this.putPlayerUUID(entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
     // Gets an immutable list of player UUID mapping entries
     public ImmutableList<
         Map.Entry<UUID, @Nullable String>

@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.Logger;
@@ -216,6 +217,56 @@ class PlayerListNameIndexTest {
             "the index must not still describe the pre-reload state"
         );
         assertIterableEquals(List.of("NewPlayer"), live.removePlayerName("NEWPLAYER", true));
+    }
+
+    // Checks the cross-identifier removal clears the same three shapes checkAnyIdentifier matches on
+    @Test
+    void removeAnyIdentifier_clearsNameEntriesUuidKeysAndLabels(
+        @TempDir Path tempDir
+    ) throws Exception {
+        UUID keyed = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        UUID labelled = UUID.fromString("11111111-2222-3333-4444-555555555555");
+
+        PlayerList list = loadedFrom(tempDir, LOGGER, "Griefer");
+        list.putPlayerUUID(keyed, null);
+        list.putPlayerUUID(labelled, "griefer");
+
+        var removed = list.removeAnyIdentifier(keyed, "GRIEFER");
+
+        assertIterableEquals(List.of("Griefer"), removed.names());
+        assertEquals(2, removed.uuids().size());
+        assertFalse(list.checkAnyIdentifier(keyed, "Griefer"));
+        assertFalse(list.checkAnyIdentifier(labelled, null));
+    }
+
+    // Checks a failed save can put back everything the removal took, across both stores
+    @Test
+    void restoreIdentifiers_putsBackEveryStore(@TempDir Path tempDir)
+        throws Exception {
+        UUID labelled = UUID.fromString("11111111-2222-3333-4444-555555555555");
+
+        PlayerList list = loadedFrom(tempDir, LOGGER, "Griefer");
+        list.putPlayerUUID(labelled, "Griefer");
+
+        list.restoreIdentifiers(list.removeAnyIdentifier(null, "griefer"));
+
+        assertTrue(list.checkPlayerName("Griefer"));
+        assertEquals("Griefer", list.peekPlayerUUID(labelled).name());
+        assertTrue(list.checkAnyIdentifier(null, "GRIEFER"));
+    }
+
+    // Checks a bare uuid entry is untouched by a name that matches nothing, the removal widening only as far as the matcher does
+    @Test
+    void removeAnyIdentifier_leavesUnrelatedEntriesAlone(@TempDir Path tempDir)
+        throws Exception {
+        UUID other = UUID.fromString("11111111-2222-3333-4444-555555555555");
+
+        PlayerList list = loadedFrom(tempDir, LOGGER, "Griefer");
+        list.putPlayerUUID(other, "SomeoneElse");
+
+        assertTrue(list.removeAnyIdentifier(null, "Innocent").isEmpty());
+        assertTrue(list.checkAnyIdentifier(other, "SomeoneElse"));
+        assertTrue(list.checkPlayerName("Griefer"));
     }
 
     // Checks normalisation pins Locale.ROOT, since a Turkish default locale lowercases "I" to the dotless "ı" and would stop this ban matching

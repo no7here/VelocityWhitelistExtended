@@ -169,6 +169,20 @@ public class WhitelistManager {
     }
 
     public List<String> getValuesForRemovalSuggestion(PlayerList list) {
+        // Offers both stores for a deny list, since its removal reaches every identifier it holds regardless of identify_mode
+        if (this.isDenyList(list)) {
+            List<String> values = Lists.newArrayList(list.getPlayerNames());
+            var entries = list.getPlayerUuidMappingEntries();
+            entries.forEach(e -> values.add(e.getKey().toString()));
+            entries.forEach(e -> {
+                var name = e.getValue();
+                if (name != null) {
+                    values.add(name);
+                }
+            });
+            return values;
+        }
+
         return switch (this.config.getIdentifyMode()) {
             case NAME -> list.getPlayerNames();
             case UUID -> {
@@ -277,6 +291,38 @@ public class WhitelistManager {
                 ));
             }
         };
+    }
+
+    // Reads a deny-list removal target from whatever the operator typed rather than from identify_mode, since a deny list matches on every identifier it holds and a removal has to be able to reach all of them
+    private ResolvedIdentity resolveDenyListTarget(String value) {
+        Optional<UUID> inputUuid = UuidUtils.tryParseUuid(value);
+        if (inputUuid.isPresent()) {
+            return new ResolvedIdentity(
+                inputUuid.get(),
+                this.server
+                    .getPlayer(inputUuid.get())
+                    .map(p -> p.getGameProfile().getName())
+                    .orElse(null)
+            );
+        }
+
+        Optional<GameProfile> onlineProfile = this.server
+            .getPlayer(value)
+            .map(Player::getGameProfile);
+        if (onlineProfile.isPresent()) {
+            return new ResolvedIdentity(
+                onlineProfile.get().getId(),
+                onlineProfile.get().getName()
+            );
+        }
+
+        // Resolves the uuid where it can, but a failure only narrows what the removal reaches rather than refusing it, since the typed name still identifies name entries and name labels
+        Optional<UUID> uuid = this.server.getConfiguration().isOnlineMode()
+            ? MojangAPI.queryPlayerByName(this.logger, this.server, value).map(
+                MojangAPI.QueryResult::uuid
+            )
+            : Optional.of(UuidUtils.getOfflinePlayerUuid(value));
+        return new ResolvedIdentity(uuid.orElse(null), value);
     }
 
     private boolean saveOrRollback(
@@ -471,6 +517,15 @@ public class WhitelistManager {
         PlayerList list,
         String value
     ) {
+        // A deny list matches on every identifier it holds, so its removal has to clear every identifier too, or an entry keeps banning a player the command has just reported as not listed
+        if (this.isDenyList(list)) {
+            return this.removeFromDenyList(
+                source,
+                list,
+                this.resolveDenyListTarget(value)
+            );
+        }
+
         Optional<ResolvedIdentity> targetOpt = this.resolveTarget(source, value);
         if (targetOpt.isEmpty()) {
             return ModifyResult.ERROR;
@@ -582,6 +637,80 @@ public class WhitelistManager {
                 yield ModifyResult.NO_CHANGE;
             }
         };
+    }
+
+    // Clears every identifier a deny list holds for the target, one command now lifting a name entry, a uuid entry and a uuid entry's name label together
+    private ModifyResult removeFromDenyList(
+        CommandSource source,
+        PlayerList list,
+        ResolvedIdentity target
+    ) {
+        synchronized (this.saveLock) {
+            PlayerList.RemovedIdentifiers removed = list.removeAnyIdentifier(
+                target.uuid(),
+                target.playerName()
+            );
+            if (!removed.isEmpty()) {
+                if (
+                    this.saveOrRollback(
+                        list,
+                        () -> list.restoreIdentifiers(removed),
+                        () ->
+                            source.sendMessage(
+                                Component.text(
+                                    String.format(
+                                        "Failed to save the %s to disk. Action was not applied.",
+                                        list.getName()
+                                    )
+                                )
+                            )
+                    )
+                ) {
+                    source.sendMessage(
+                        Component.text(
+                            String.format(
+                                "Removed %s from the %s",
+                                describeRemoved(removed),
+                                list.getName()
+                            )
+                        )
+                    );
+                    return ModifyResult.SUCCESS;
+                }
+                return ModifyResult.ERROR;
+            }
+        }
+
+        source.sendMessage(
+            Component.text(
+                String.format(
+                    "Player %s is not in the %s",
+                    describeTarget(target),
+                    list.getName()
+                )
+            )
+        );
+        return ModifyResult.NO_CHANGE;
+    }
+
+    // Spells out everything a deny-list removal took, so an operator can see that a stale name label went with the entry they asked about
+    private static String describeRemoved(
+        PlayerList.RemovedIdentifiers removed
+    ) {
+        List<String> parts = Lists.newArrayList(removed.names());
+        removed
+            .uuids()
+            .forEach(e -> parts.add(pretty(e.getKey(), e.getValue())));
+        return String.join(", ", parts);
+    }
+
+    private static String describeTarget(ResolvedIdentity target) {
+        UUID uuid = target.uuid();
+        String playerName = target.playerName();
+        if (uuid != null) {
+            return pretty(uuid, playerName);
+        }
+        return playerName != null ? playerName : "?";
     }
 
     // Restores a UUID mapping to its previous state for undoing failed mutations
