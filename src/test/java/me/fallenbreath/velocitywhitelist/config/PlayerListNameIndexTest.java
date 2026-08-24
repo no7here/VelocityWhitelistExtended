@@ -55,7 +55,7 @@ class PlayerListNameIndexTest {
     @Test
     void checkPlayerNameIgnoreCase_matchesAnyCasing(@TempDir Path tempDir) {
         PlayerList list = newList(tempDir);
-        list.addPlayerName("Steve");
+        list.addPlayerName("Steve", true);
 
         assertTrue(list.checkPlayerNameIgnoreCase("steve"));
         assertTrue(list.checkPlayerNameIgnoreCase("STEVE"));
@@ -73,9 +73,9 @@ class PlayerListNameIndexTest {
         @TempDir Path tempDir
     ) {
         PlayerList list = newList(tempDir);
-        list.addPlayerName("Steve");
+        list.addPlayerName("Steve", true);
 
-        assertIterableEquals(List.of("Steve"), list.removePlayerName("steve"));
+        assertIterableEquals(List.of("Steve"), list.removePlayerName("steve", true));
         assertFalse(list.checkPlayerNameIgnoreCase("Steve"));
         assertTrue(list.getPlayerNames().isEmpty());
     }
@@ -85,9 +85,9 @@ class PlayerListNameIndexTest {
         @TempDir Path tempDir
     ) {
         PlayerList list = newList(tempDir);
-        list.addPlayerName("Steve");
+        list.addPlayerName("Steve", true);
 
-        assertTrue(list.removePlayerName("Alex").isEmpty());
+        assertTrue(list.removePlayerName("Alex", true).isEmpty());
         assertTrue(list.checkPlayerNameIgnoreCase("steve"));
     }
 
@@ -97,12 +97,58 @@ class PlayerListNameIndexTest {
     ) {
         PlayerList list = newList(tempDir);
 
-        assertTrue(list.addPlayerName("Steve"));
+        assertTrue(list.addPlayerName("Steve", true));
         assertFalse(
-            list.addPlayerName("steve"),
+            list.addPlayerName("steve", true),
             "a name differing only by capitalisation is the same entry now, so no new collision may be created"
         );
         assertIterableEquals(List.of("Steve"), list.getPlayerNames());
+    }
+
+    // Checks an exactly matched list still accepts a case variant, since on an offline proxy "Steve" and "steve" are two accounts and refusing the second leaves it unlisted
+    @Test
+    void addPlayerName_withoutFolding_storesACaseVariant(
+        @TempDir Path tempDir
+    ) {
+        PlayerList list = newList(tempDir);
+
+        assertTrue(list.addPlayerName("Steve", false));
+        assertTrue(list.addPlayerName("steve", false));
+        assertFalse(
+            list.addPlayerName("Steve", false),
+            "an exact duplicate is still one entry"
+        );
+        assertIterableEquals(List.of("Steve", "steve"), list.getPlayerNames());
+    }
+
+    // Checks an exactly matched list removes only what was named, since taking the other spelling with it would revoke a second account's access
+    @Test
+    void removePlayerName_withoutFolding_leavesTheOtherSpelling(
+        @TempDir Path tempDir
+    ) throws Exception {
+        PlayerList list = loadedFrom(tempDir, LOGGER, "Steve", "steve");
+
+        assertIterableEquals(
+            List.of("Steve"),
+            list.removePlayerName("Steve", false)
+        );
+        assertTrue(list.checkPlayerName("steve"));
+        assertFalse(list.checkPlayerName("Steve"));
+        assertTrue(
+            list.checkPlayerNameIgnoreCase("STEVE"),
+            "the index must still describe the spelling left behind"
+        );
+    }
+
+    @Test
+    void removePlayerName_withoutFolding_returnsEmptyForAnotherCasing(
+        @TempDir Path tempDir
+    ) {
+        PlayerList list = newList(tempDir);
+        list.addPlayerName("Steve", false);
+
+        assertTrue(list.removePlayerName("steve", false).isEmpty());
+        assertTrue(list.checkPlayerName("Steve"));
     }
 
     // Checks a removal whose save fails puts back every spelling it took, not just the one the admin typed
@@ -112,7 +158,7 @@ class PlayerListNameIndexTest {
     ) throws Exception {
         PlayerList list = loadedFrom(tempDir, LOGGER, "Steve", "steve");
 
-        var removed = list.removePlayerName("STEVE");
+        var removed = list.removePlayerName("STEVE", true);
         assertEquals(2, removed.size());
 
         list.restorePlayerNames(removed);
@@ -139,7 +185,7 @@ class PlayerListNameIndexTest {
         throws Exception {
         PlayerList list = loadedFrom(tempDir, LOGGER, "Steve", "steve");
 
-        var removed = list.removePlayerName("steve");
+        var removed = list.removePlayerName("steve", true);
 
         assertEquals(2, removed.size(), "both spellings are one entry now");
         assertTrue(removed.contains("Steve"));
@@ -159,7 +205,7 @@ class PlayerListNameIndexTest {
     @Test
     void nameIndex_isRebuiltOnResetTo(@TempDir Path tempDir) throws Exception {
         PlayerList live = newList(tempDir);
-        live.addPlayerName("OldPlayer");
+        live.addPlayerName("OldPlayer", true);
 
         PlayerList reloaded = loadedFrom(tempDir, LOGGER, "NewPlayer");
         live.resetTo(reloaded);
@@ -169,7 +215,7 @@ class PlayerListNameIndexTest {
             live.checkPlayerNameIgnoreCase("oldplayer"),
             "the index must not still describe the pre-reload state"
         );
-        assertIterableEquals(List.of("NewPlayer"), live.removePlayerName("NEWPLAYER"));
+        assertIterableEquals(List.of("NewPlayer"), live.removePlayerName("NEWPLAYER", true));
     }
 
     // Checks normalisation pins Locale.ROOT, since a Turkish default locale lowercases "I" to the dotless "ı" and would stop this ban matching
@@ -180,12 +226,12 @@ class PlayerListNameIndexTest {
             Locale.setDefault(Locale.forLanguageTag("tr"));
 
             PlayerList list = newList(tempDir);
-            list.addPlayerName("IanTheGriefer");
+            list.addPlayerName("IanTheGriefer", true);
 
             assertTrue(list.checkPlayerNameIgnoreCase("ianthegriefer"));
             assertIterableEquals(
                 List.of("IanTheGriefer"),
-                list.removePlayerName("IANTHEGRIEFER")
+                list.removePlayerName("IANTHEGRIEFER", true)
             );
         } finally {
             Locale.setDefault(previous);

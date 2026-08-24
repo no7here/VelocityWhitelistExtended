@@ -127,14 +127,21 @@ public class PlayerList implements YamlStoredList<PlayerList> {
 
     /**
      * Adds a player name to the list, treating an existing entry that differs only by
-     * capitalisation as already present so no new case collision is ever created.
+     * capitalisation as already present when foldCase is set, so no new case collision is created.
+     *
+     * foldCase must follow the matcher this list is read with. Folding it on a list that is matched
+     * exactly refuses a name no stored entry will ever match, telling the caller the account is
+     * already listed while it stays unlisted.
      *
      * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
      */
     @ApiStatus.Internal
-    public boolean addPlayerName(String name) {
+    public boolean addPlayerName(String name, boolean foldCase) {
         synchronized (this.lock) {
-            if (this.nameIndex.containsKey(normaliseName(name))) {
+            boolean present = foldCase
+                ? this.nameIndex.containsKey(normaliseName(name))
+                : this.names.contains(name);
+            if (present) {
                 return false;
             }
             this.nameIndex.put(normaliseName(name), name);
@@ -143,17 +150,27 @@ public class PlayerList implements YamlStoredList<PlayerList> {
     }
 
     /**
-     * Removes every stored spelling of a player name, ignoring capitalisation.
+     * Removes a player name, every stored spelling of it when foldCase is set and only the exact
+     * string otherwise.
      *
-     * Returns the spellings actually removed rather than a boolean: with case-insensitive matching,
+     * Returns the spellings actually removed rather than a boolean: under case-insensitive matching
      * "Steve" and "steve" are one entry, so a single removal can clear more than one stored string,
      * and the caller needs the full set both to report it and to restore it if the save fails.
+     * foldCase follows the matcher for the same reason as addPlayerName, in the opposite direction:
+     * folding it on an exactly matched list deletes an entry the caller never asked about.
      *
      * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
      */
     @ApiStatus.Internal
-    public ImmutableList<String> removePlayerName(String name) {
+    public ImmutableList<String> removePlayerName(String name, boolean foldCase) {
         synchronized (this.lock) {
+            if (!foldCase) {
+                if (!this.names.remove(name)) {
+                    return ImmutableList.of();
+                }
+                this.nameIndex.remove(normaliseName(name), name);
+                return ImmutableList.of(name);
+            }
             Collection<String> removed = this.nameIndex.removeAll(
                 normaliseName(name)
             );

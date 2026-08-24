@@ -1,10 +1,15 @@
 package me.fallenbreath.velocitywhitelist;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.proxy.ProxyServer;
+import com.velocitypowered.api.proxy.config.ProxyConfig;
 import com.velocitypowered.api.util.GameProfile;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -52,12 +57,18 @@ class WhitelistManagerNameCaseMatchingTest {
             )
         );
 
+        // Mirrors the proxy's own mode into the mock so the command paths, which read it straight off the server, agree with what the matcher was configured with
+        ProxyConfig proxyConfig = mock(ProxyConfig.class);
+        when(proxyConfig.isOnlineMode()).thenReturn(proxyOnlineMode);
+        ProxyServer server = mock(ProxyServer.class);
+        when(server.getConfiguration()).thenReturn(proxyConfig);
+
         WhitelistManager manager = new WhitelistManager(
             mock(VelocityWhitelistPlugin.class),
             LOGGER,
             config,
             tempDir,
-            mock(ProxyServer.class)
+            server
         );
         assertTrue(manager.loadLists());
         return manager;
@@ -85,7 +96,7 @@ class WhitelistManagerNameCaseMatchingTest {
         assertFalse(manager.isPlayerInWhitelist(named("Steven")));
     }
 
-    // Guards the gate itself, since without it a stored "Steve" would become a whitelist "steve" also satisfies on every offline-mode install
+    // Guards the gate itself, since without it a stored "Steve" would become a whitelist entry that "steve" also satisfies on every offline-mode install
     @Test
     void whitelist_onOfflineProxy_staysCaseSensitive(@TempDir Path tempDir)
         throws Exception {
@@ -100,6 +111,56 @@ class WhitelistManagerNameCaseMatchingTest {
         assertFalse(
             manager.isPlayerInWhitelist(named("steve")),
             "on an offline proxy Steve and steve are different accounts, so this must stay denied exactly as it is today"
+        );
+    }
+
+    // Checks mutation follows the matcher, an offline whitelist that refused "steve" beside "Steve" reporting the account as listed while its login stayed denied
+    @Test
+    void whitelist_onOfflineProxy_storesBothSpellings(@TempDir Path tempDir)
+        throws Exception {
+        WhitelistManager manager = managerWith(
+            tempDir,
+            false,
+            "whitelist.yml",
+            "Steve"
+        );
+
+        assertEquals(
+            WhitelistManager.ModifyResult.SUCCESS,
+            manager.addPlayer(
+                mock(CommandSource.class),
+                manager.getWhitelist(),
+                "steve",
+                null
+            )
+        );
+        assertTrue(manager.isPlayerInWhitelist(named("steve")));
+        assertTrue(manager.isPlayerInWhitelist(named("Steve")));
+    }
+
+    // Checks the deny list folds on the same offline proxy, where a second spelling adds nothing because the matcher already catches it
+    @Test
+    void blacklist_onOfflineProxy_refusesACaseVariant(@TempDir Path tempDir)
+        throws Exception {
+        WhitelistManager manager = managerWith(
+            tempDir,
+            false,
+            "blacklist.yml",
+            "Griefer"
+        );
+
+        assertEquals(
+            WhitelistManager.ModifyResult.NO_CHANGE,
+            manager.addPlayer(
+                mock(CommandSource.class),
+                manager.getBlacklist(),
+                "griefer",
+                null
+            )
+        );
+        assertIterableEquals(
+            List.of("Griefer"),
+            manager.getBlacklist().getPlayerNames()
         );
     }
 

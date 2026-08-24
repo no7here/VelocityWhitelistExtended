@@ -130,10 +130,20 @@ public class WhitelistManager {
         return whitelistOk && blacklistOk && ipBanOk;
     }
 
+    // Distinguishes the deny list from the allow list, the two failing in opposite directions so they cannot share one matching or removal rule
+    private boolean isDenyList(PlayerList list) {
+        return list == this.blacklist;
+    }
+
+    // Reports whether name comparison folds case for a list, tracking isPlayerInList exactly so that adding and removing can never disagree with the matcher about what counts as one entry
+    private boolean foldsNameCase(PlayerList list) {
+        return this.isDenyList(list) || this.config.isProxyOnlineMode();
+    }
+
     // Matches an allow list on the single identifier identify_mode designates, ignoring capitalisation only on an online-mode proxy where Mojang guarantees "Steve" and "steve" cannot be two accounts
     private boolean isPlayerInList(GameProfile profile, PlayerList list) {
         return switch (this.config.getIdentifyMode()) {
-            case NAME -> this.config.isProxyOnlineMode()
+            case NAME -> this.foldsNameCase(list)
                 ? list.checkPlayerNameIgnoreCase(profile.getName())
                 : list.checkPlayerName(profile.getName());
             case UUID -> list.checkPlayerUUID(profile.getId());
@@ -307,12 +317,19 @@ public class WhitelistManager {
                 boolean added;
 
                 synchronized (this.saveLock) {
-                    added = list.addPlayerName(playerName);
+                    added = list.addPlayerName(
+                        playerName,
+                        this.foldsNameCase(list)
+                    );
                     if (
                         added &&
                         !this.saveOrRollback(
                             list,
-                            () -> list.removePlayerName(playerName),
+                            () ->
+                                list.removePlayerName(
+                                    playerName,
+                                    this.foldsNameCase(list)
+                                ),
                             () ->
                                 source.sendMessage(
                                     Component.text(
@@ -466,7 +483,8 @@ public class WhitelistManager {
                 synchronized (this.saveLock) {
                     // Case-insensitive matching means one removal can clear several stored spellings, so the rollback restores all of them rather than re-adding a single string
                     ImmutableList<String> removed = list.removePlayerName(
-                        playerName
+                        playerName,
+                        this.foldsNameCase(list)
                     );
                     if (!removed.isEmpty()) {
                         if (
