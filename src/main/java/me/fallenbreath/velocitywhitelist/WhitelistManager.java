@@ -12,6 +12,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.velocitypowered.api.command.CommandSource;
 import com.velocitypowered.api.event.ResultedEvent;
@@ -129,9 +130,22 @@ public class WhitelistManager {
         return whitelistOk && blacklistOk && ipBanOk;
     }
 
+    // Distinguishes the deny list from the allow list, the two failing in opposite directions so they cannot share one matching or removal rule
+    private boolean isDenyList(PlayerList list) {
+        return list == this.blacklist;
+    }
+
+    // Reports whether name comparison folds case for a list, tracking isPlayerInList exactly so that adding and removing can never disagree with the matcher about what counts as one entry
+    private boolean foldsNameCase(PlayerList list) {
+        return this.isDenyList(list) || this.config.isProxyOnlineMode();
+    }
+
+    // Matches an allow list on the single identifier identify_mode designates, ignoring capitalisation only on an online-mode proxy where Mojang guarantees "Steve" and "steve" cannot be two accounts
     private boolean isPlayerInList(GameProfile profile, PlayerList list) {
         return switch (this.config.getIdentifyMode()) {
-            case NAME -> list.checkPlayerName(profile.getName());
+            case NAME -> this.foldsNameCase(list)
+                ? list.checkPlayerNameIgnoreCase(profile.getName())
+                : list.checkPlayerName(profile.getName());
             case UUID -> list.checkPlayerUUID(profile.getId());
         };
     }
@@ -140,8 +154,12 @@ public class WhitelistManager {
         return this.isPlayerInList(profile, this.whitelist);
     }
 
+    // Matches a deny list on every identifier held for an entry, since a missed match silently admits a banned account while an extra match only inconveniences a legitimate one
     public boolean isPlayerInBlacklist(GameProfile profile) {
-        return this.isPlayerInList(profile, this.blacklist);
+        return this.blacklist.checkAnyIdentifier(
+            profile.getId(),
+            profile.getName()
+        );
     }
 
     private static String pretty(@NotNull UUID uuid, @Nullable String name) {
@@ -151,6 +169,20 @@ public class WhitelistManager {
     }
 
     public List<String> getValuesForRemovalSuggestion(PlayerList list) {
+        // Offers both stores for a deny list, since its removal reaches every identifier it holds regardless of identify_mode
+        if (this.isDenyList(list)) {
+            List<String> values = Lists.newArrayList(list.getPlayerNames());
+            var entries = list.getPlayerUuidMappingEntries();
+            entries.forEach(e -> values.add(e.getKey().toString()));
+            entries.forEach(e -> {
+                var name = e.getValue();
+                if (name != null) {
+                    values.add(name);
+                }
+            });
+            return values;
+        }
+
         return switch (this.config.getIdentifyMode()) {
             case NAME -> list.getPlayerNames();
             case UUID -> {
@@ -169,6 +201,14 @@ public class WhitelistManager {
     }
 
     public List<String> getValuesForListing(PlayerList list) {
+        // Shows both stores for a deny list, so the entries and the size reported match what the login path actually enforces rather than only the store identify_mode designates
+        if (this.isDenyList(list)) {
+            List<String> values = Lists.newArrayList(list.getPlayerNames());
+            list.getPlayerUuidMappingEntries()
+                .forEach(e -> values.add(pretty(e.getKey(), e.getValue())));
+            return values;
+        }
+
         return switch (this.config.getIdentifyMode()) {
             case NAME -> list.getPlayerNames();
             case UUID -> list.getPlayerUuidMappingEntries()
@@ -261,6 +301,38 @@ public class WhitelistManager {
         };
     }
 
+    // Reads a deny-list removal target from whatever the operator typed rather than from identify_mode, since a deny list matches on every identifier it holds and a removal has to be able to reach all of them
+    private ResolvedIdentity resolveDenyListTarget(String value) {
+        Optional<UUID> inputUuid = UuidUtils.tryParseUuid(value);
+        if (inputUuid.isPresent()) {
+            return new ResolvedIdentity(
+                inputUuid.get(),
+                this.server
+                    .getPlayer(inputUuid.get())
+                    .map(p -> p.getGameProfile().getName())
+                    .orElse(null)
+            );
+        }
+
+        Optional<GameProfile> onlineProfile = this.server
+            .getPlayer(value)
+            .map(Player::getGameProfile);
+        if (onlineProfile.isPresent()) {
+            return new ResolvedIdentity(
+                onlineProfile.get().getId(),
+                onlineProfile.get().getName()
+            );
+        }
+
+        // Resolves the uuid where it can, but a failure only narrows what the removal reaches rather than refusing it, since the typed name still identifies name entries and name labels
+        Optional<UUID> uuid = this.server.getConfiguration().isOnlineMode()
+            ? MojangAPI.queryPlayerByName(this.logger, this.server, value).map(
+                MojangAPI.QueryResult::uuid
+            )
+            : Optional.of(UuidUtils.getOfflinePlayerUuid(value));
+        return new ResolvedIdentity(uuid.orElse(null), value);
+    }
+
     private boolean saveOrRollback(
         YamlStoredList<?> list,
         Runnable rollback,
@@ -299,12 +371,19 @@ public class WhitelistManager {
                 boolean added;
 
                 synchronized (this.saveLock) {
-                    added = list.addPlayerName(playerName);
+                    added = list.addPlayerName(
+                        playerName,
+                        this.foldsNameCase(list)
+                    );
                     if (
                         added &&
                         !this.saveOrRollback(
                             list,
-                            () -> list.removePlayerName(playerName),
+                            () ->
+                                list.removePlayerName(
+                                    playerName,
+                                    this.foldsNameCase(list)
+                                ),
                             () ->
                                 source.sendMessage(
                                     Component.text(
@@ -446,6 +525,15 @@ public class WhitelistManager {
         PlayerList list,
         String value
     ) {
+        // A deny list matches on every identifier it holds, so its removal has to clear every identifier too, or an entry keeps banning a player the command has just reported as not listed
+        if (this.isDenyList(list)) {
+            return this.removeFromDenyList(
+                source,
+                list,
+                this.resolveDenyListTarget(value)
+            );
+        }
+
         Optional<ResolvedIdentity> targetOpt = this.resolveTarget(source, value);
         if (targetOpt.isEmpty()) {
             return ModifyResult.ERROR;
@@ -456,11 +544,16 @@ public class WhitelistManager {
             case NAME -> {
                 String playerName = target.playerName();
                 synchronized (this.saveLock) {
-                    if (list.removePlayerName(playerName)) {
+                    // Case-insensitive matching means one removal can clear several stored spellings, so the rollback restores all of them rather than re-adding a single string
+                    ImmutableList<String> removed = list.removePlayerName(
+                        playerName,
+                        this.foldsNameCase(list)
+                    );
+                    if (!removed.isEmpty()) {
                         if (
                             this.saveOrRollback(
                                 list,
-                                () -> list.addPlayerName(playerName),
+                                () -> list.restorePlayerNames(removed),
                                 () ->
                                     source.sendMessage(
                                         Component.text(
@@ -476,7 +569,7 @@ public class WhitelistManager {
                                 Component.text(
                                     String.format(
                                         "Removed player %s from the %s",
-                                        playerName,
+                                        String.join(", ", removed),
                                         list.getName()
                                     )
                                 )
@@ -552,6 +645,80 @@ public class WhitelistManager {
                 yield ModifyResult.NO_CHANGE;
             }
         };
+    }
+
+    // Clears every identifier a deny list holds for the target, one command now lifting a name entry, a uuid entry and a uuid entry's name label together
+    private ModifyResult removeFromDenyList(
+        CommandSource source,
+        PlayerList list,
+        ResolvedIdentity target
+    ) {
+        synchronized (this.saveLock) {
+            PlayerList.RemovedIdentifiers removed = list.removeAnyIdentifier(
+                target.uuid(),
+                target.playerName()
+            );
+            if (!removed.isEmpty()) {
+                if (
+                    this.saveOrRollback(
+                        list,
+                        () -> list.restoreIdentifiers(removed),
+                        () ->
+                            source.sendMessage(
+                                Component.text(
+                                    String.format(
+                                        "Failed to save the %s to disk. Action was not applied.",
+                                        list.getName()
+                                    )
+                                )
+                            )
+                    )
+                ) {
+                    source.sendMessage(
+                        Component.text(
+                            String.format(
+                                "Removed %s from the %s",
+                                describeRemoved(removed),
+                                list.getName()
+                            )
+                        )
+                    );
+                    return ModifyResult.SUCCESS;
+                }
+                return ModifyResult.ERROR;
+            }
+        }
+
+        source.sendMessage(
+            Component.text(
+                String.format(
+                    "Player %s is not in the %s",
+                    describeTarget(target),
+                    list.getName()
+                )
+            )
+        );
+        return ModifyResult.NO_CHANGE;
+    }
+
+    // Spells out everything a deny-list removal took, so an operator can see that a stale name label went with the entry they asked about
+    private static String describeRemoved(
+        PlayerList.RemovedIdentifiers removed
+    ) {
+        List<String> parts = Lists.newArrayList(removed.names());
+        removed
+            .uuids()
+            .forEach(e -> parts.add(pretty(e.getKey(), e.getValue())));
+        return String.join(", ", parts);
+    }
+
+    private static String describeTarget(ResolvedIdentity target) {
+        UUID uuid = target.uuid();
+        String playerName = target.playerName();
+        if (uuid != null) {
+            return pretty(uuid, playerName);
+        }
+        return playerName != null ? playerName : "?";
     }
 
     // Restores a UUID mapping to its previous state for undoing failed mutations

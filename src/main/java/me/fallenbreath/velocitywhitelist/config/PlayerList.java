@@ -3,7 +3,9 @@ package me.fallenbreath.velocitywhitelist.config;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -15,9 +17,13 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 
 import java.util.function.Supplier;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.HashMultiset;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Multiset;
 import com.google.common.collect.Sets;
 
 import me.fallenbreath.velocitywhitelist.utils.FileUtils;
@@ -28,6 +34,10 @@ public class PlayerList implements YamlStoredList<PlayerList> {
 
     private final Set<String> names = Sets.newLinkedHashSet();
     private final Map<UUID, @Nullable String> uuids = Maps.newLinkedHashMap();
+    // Maps a normalised name to every spelling of it stored, a multimap because an older file can hold both "Steve" and "steve" and discarding either would throw away a ban
+    private final Multimap<String, String> nameIndex = HashMultimap.create();
+    // Tracks the name labels attached to uuid entries so a deny-list lookup by name stays O(1) on the login path, a multiset because two uuid entries can carry the same label once a name changes hands
+    private final Multiset<String> labelIndex = HashMultiset.create();
     private final String name;
     private final Path filePath;
     private final Supplier<Boolean> configEnableGetter;
@@ -76,34 +86,204 @@ public class PlayerList implements YamlStoredList<PlayerList> {
         }
     }
 
-    // Checks if a player name exists in the list
+    // Normalises a player name for case-insensitive lookup, pinned to Locale.ROOT since a Turkish default locale lowercases "I" to "ı" and a ban would quietly stop matching
+    static String normaliseName(String name) {
+        return name.toLowerCase(Locale.ROOT);
+    }
+
+    // Checks if a player name exists in the list, comparing exactly
     public boolean checkPlayerName(String name) {
         synchronized (this.lock) {
             return this.names.contains(name);
         }
     }
 
+    // Checks if a player name exists in the list, ignoring capitalisation
+    public boolean checkPlayerNameIgnoreCase(String name) {
+        synchronized (this.lock) {
+            return this.nameIndex.containsKey(normaliseName(name));
+        }
+    }
+
+    // Checks whether any identifier held for a profile appears in this list, as a uuid key, a name entry or the name label on a uuid entry, deliberately over-matching since this backs the deny list only
+    public boolean checkAnyIdentifier(
+        @Nullable UUID uuid,
+        @Nullable String name
+    ) {
+        synchronized (this.lock) {
+            if (uuid != null && this.uuids.containsKey(uuid)) {
+                return true;
+            }
+            if (name == null) {
+                return false;
+            }
+            String normalised = normaliseName(name);
+            return (
+                this.nameIndex.containsKey(normalised) ||
+                this.labelIndex.contains(normalised)
+            );
+        }
+    }
+
     /**
-     * Adds a player name to the list.
+     * Adds a player name to the list, treating an existing entry that differs only by
+     * capitalisation as already present when foldCase is set, so no new case collision is created.
+     *
+     * foldCase must follow the matcher this list is read with. Folding it on a list that is matched
+     * exactly refuses a name no stored entry will ever match, telling the caller the account is
+     * already listed while it stays unlisted.
      *
      * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
      */
     @ApiStatus.Internal
-    public boolean addPlayerName(String name) {
+    public boolean addPlayerName(String name, boolean foldCase) {
         synchronized (this.lock) {
+            boolean present = foldCase
+                ? this.nameIndex.containsKey(normaliseName(name))
+                : this.names.contains(name);
+            if (present) {
+                return false;
+            }
+            this.nameIndex.put(normaliseName(name), name);
             return this.names.add(name);
         }
     }
 
     /**
-     * Removes a player name from the list.
+     * Removes a player name, every stored spelling of it when foldCase is set and only the exact
+     * string otherwise.
+     *
+     * Returns the spellings actually removed rather than a boolean: under case-insensitive matching
+     * "Steve" and "steve" are one entry, so a single removal can clear more than one stored string,
+     * and the caller needs the full set both to report it and to restore it if the save fails.
+     * foldCase follows the matcher for the same reason as addPlayerName, in the opposite direction:
+     * folding it on an exactly matched list deletes an entry the caller never asked about.
      *
      * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
      */
     @ApiStatus.Internal
-    public boolean removePlayerName(String name) {
+    public ImmutableList<String> removePlayerName(String name, boolean foldCase) {
         synchronized (this.lock) {
-            return this.names.remove(name);
+            if (!foldCase) {
+                if (!this.names.remove(name)) {
+                    return ImmutableList.of();
+                }
+                this.nameIndex.remove(normaliseName(name), name);
+                return ImmutableList.of(name);
+            }
+            Collection<String> removed = this.nameIndex.removeAll(
+                normaliseName(name)
+            );
+            ImmutableList<String> spellings = ImmutableList.copyOf(removed);
+            this.names.removeAll(spellings);
+            return spellings;
+        }
+    }
+
+    /**
+     * Restores previously removed spellings verbatim, for undoing a removal whose save failed.
+     * Unlike addPlayerName this does not reject case collisions, since it is putting back exactly
+     * what was there.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
+    public void restorePlayerNames(Collection<String> spellings) {
+        synchronized (this.lock) {
+            for (String spelling : spellings) {
+                this.names.add(spelling);
+                this.nameIndex.put(normaliseName(spelling), spelling);
+            }
+        }
+    }
+
+    // Everything a single cross-identifier removal took, kept so a failed save can put it back exactly as it stood
+    public record RemovedIdentifiers(
+        ImmutableList<String> names,
+        ImmutableList<Map.Entry<UUID, @Nullable String>> uuids
+    ) {
+        public boolean isEmpty() {
+            return this.names.isEmpty() && this.uuids.isEmpty();
+        }
+    }
+
+    /**
+     * Removes every identifier this list holds for a profile: the uuid key itself, every stored
+     * spelling of the name it is known by, the label recorded against that uuid, and every uuid
+     * entry carrying either name as its label.
+     *
+     * Mirrors checkAnyIdentifier so that anything able to make this list match is also something a
+     * removal can lift. Without it a deny-list entry the command cannot reach keeps banning a player
+     * the operator has just been told is not listed.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
+    public RemovedIdentifiers removeAnyIdentifier(
+        @Nullable UUID uuid,
+        @Nullable String name
+    ) {
+        synchronized (this.lock) {
+            List<Map.Entry<UUID, @Nullable String>> uuidsToRemove =
+                Lists.newArrayList();
+            Set<String> sweepNames = Sets.newLinkedHashSet();
+            if (name != null) {
+                sweepNames.add(normaliseName(name));
+            }
+            if (uuid != null && this.uuids.containsKey(uuid)) {
+                String label = this.uuids.get(uuid);
+                uuidsToRemove.add(Maps.immutableEntry(uuid, label));
+                // Sweeps the matched entry's stored label alongside the name passed in, the two differing after a rename, so what a removal clears never depends on whether the player happens to be online
+                if (label != null) {
+                    sweepNames.add(normaliseName(label));
+                }
+            }
+
+            List<String> namesToRemove = Lists.newArrayList();
+            for (String normalised : sweepNames) {
+                // Copies out of the multimap's live view before mutating anything below
+                namesToRemove.addAll(this.nameIndex.get(normalised));
+            }
+            for (Map.Entry<UUID, String> entry : this.uuids.entrySet()) {
+                // Skips a uuid already collected above so a failed save does not restore it twice
+                if (
+                    entry.getValue() != null &&
+                    !entry.getKey().equals(uuid) &&
+                    sweepNames.contains(normaliseName(entry.getValue()))
+                ) {
+                    uuidsToRemove.add(
+                        Maps.immutableEntry(entry.getKey(), entry.getValue())
+                    );
+                }
+            }
+
+            for (String spelling : namesToRemove) {
+                this.names.remove(spelling);
+                this.nameIndex.remove(normaliseName(spelling), spelling);
+            }
+            for (Map.Entry<UUID, @Nullable String> entry : uuidsToRemove) {
+                this.removePlayerUUID(entry.getKey());
+            }
+
+            return new RemovedIdentifiers(
+                ImmutableList.copyOf(namesToRemove),
+                ImmutableList.copyOf(uuidsToRemove)
+            );
+        }
+    }
+
+    /**
+     * Restores everything a cross-identifier removal took, for undoing one whose save failed.
+     *
+     * @apiNote Internal use only. Do not call this directly outside WhitelistManager as it bypasses save atomicity.
+     */
+    @ApiStatus.Internal
+    public void restoreIdentifiers(RemovedIdentifiers removed) {
+        synchronized (this.lock) {
+            this.restorePlayerNames(removed.names());
+            for (Map.Entry<UUID, @Nullable String> entry : removed.uuids()) {
+                this.putPlayerUUID(entry.getKey(), entry.getValue());
+            }
         }
     }
 
@@ -151,7 +331,13 @@ public class PlayerList implements YamlStoredList<PlayerList> {
     @ApiStatus.Internal
     public void putPlayerUUID(UUID uuid, @Nullable String playerName) {
         synchronized (this.lock) {
-            this.uuids.put(uuid, playerName);
+            String previousName = this.uuids.put(uuid, playerName);
+            if (previousName != null) {
+                this.labelIndex.remove(normaliseName(previousName));
+            }
+            if (playerName != null) {
+                this.labelIndex.add(normaliseName(playerName));
+            }
         }
     }
 
@@ -163,7 +349,12 @@ public class PlayerList implements YamlStoredList<PlayerList> {
     @ApiStatus.Internal
     public @Nullable String removePlayerUUID(UUID uuid) {
         synchronized (this.lock) {
-            return this.uuids.remove(uuid);
+            String removedName = this.uuids.remove(uuid);
+            if (removedName != null) {
+                // Removes a single occurrence so a label shared with another uuid entry keeps matching
+                this.labelIndex.remove(normaliseName(removedName));
+            }
+            return removedName;
         }
     }
 
@@ -190,7 +381,37 @@ public class PlayerList implements YamlStoredList<PlayerList> {
             this.names.addAll(newList.names);
             this.uuids.clear();
             this.uuids.putAll(newList.uuids);
+            // Reload swaps state through here rather than load() so the indexes must be rebuilt on this path too, or they would keep describing the previous file
+            this.rebuildIndexes();
             this.loadOk = true;
+        }
+    }
+
+    // Rebuilds both normalised indexes from the stored entries. Must be called while holding the lock.
+    private void rebuildIndexes() {
+        this.nameIndex.clear();
+        for (String storedName : this.names) {
+            this.nameIndex.put(normaliseName(storedName), storedName);
+        }
+        this.labelIndex.clear();
+        for (String label : this.uuids.values()) {
+            if (label != null) {
+                this.labelIndex.add(normaliseName(label));
+            }
+        }
+    }
+
+    // Reports names differing only by capitalisation, which are kept rather than merged and behave as one entry only where the list folds name case. Must be called while holding the lock.
+    private void warnAboutCaseCollisions(Logger logger) {
+        for (String normalised : this.nameIndex.keySet()) {
+            Collection<String> spellings = this.nameIndex.get(normalised);
+            if (spellings.size() > 1) {
+                logger.warn(
+                    "{}: {} differ only by capitalisation. They are all kept. A deny list matches them as one entry and removes them together; an allow list does so only when the proxy is in online mode, and otherwise keeps treating them as separate accounts",
+                    this.name,
+                    String.join(" / ", spellings)
+                );
+            }
         }
     }
 
@@ -215,7 +436,9 @@ public class PlayerList implements YamlStoredList<PlayerList> {
 
         synchronized (this.lock) {
             this.names.clear();
+            this.nameIndex.clear();
             this.uuids.clear();
+            this.labelIndex.clear();
             int skipped = 0;
 
             // Extract the names value if options is not null, a present but non-list value means the file is structurally corrupt so fail the whole load so a reload keeps the previous state instead of silently replacing the list with an empty one
@@ -295,6 +518,9 @@ public class PlayerList implements YamlStoredList<PlayerList> {
                     }
                 }
             }
+
+            this.rebuildIndexes();
+            this.warnAboutCaseCollisions(logger);
 
             this.loadOk = true;
             YamlStoredList.logSkippedEntries(logger, this.name, skipped);
