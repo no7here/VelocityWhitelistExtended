@@ -201,6 +201,14 @@ public class WhitelistManager {
     }
 
     public List<String> getValuesForListing(PlayerList list) {
+        // Shows both stores for a deny list, so the entries and the size reported match what the login path actually enforces rather than only the store identify_mode designates
+        if (this.isDenyList(list)) {
+            List<String> values = Lists.newArrayList(list.getPlayerNames());
+            list.getPlayerUuidMappingEntries()
+                .forEach(e -> values.add(pretty(e.getKey(), e.getValue())));
+            return values;
+        }
+
         return switch (this.config.getIdentifyMode()) {
             case NAME -> list.getPlayerNames();
             case UUID -> list.getPlayerUuidMappingEntries()

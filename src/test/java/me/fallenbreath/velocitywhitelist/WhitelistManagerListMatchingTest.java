@@ -1,6 +1,8 @@
 package me.fallenbreath.velocitywhitelist;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -167,6 +169,72 @@ class WhitelistManagerListMatchingTest {
 
         assertFalse(
             manager.isPlayerInBlacklist(profile(UUID.randomUUID(), "Innocent"))
+        );
+    }
+
+    // Checks the listing reports the uuid entry that bans in name mode, an operator otherwise reading a size of zero while the ban fires
+    @Test
+    void blacklistListing_showsBothStores_inNameMode(@TempDir Path tempDir)
+        throws Exception {
+        WhitelistManager manager = managerWith(
+            tempDir,
+            "name",
+            "blacklist.yml",
+            "names:",
+            "  - Griefer",
+            "uuids:",
+            "  - " + LISTED_UUID + ": Renamed"
+        );
+
+        List<String> listed = manager.getValuesForListing(
+            manager.getBlacklist()
+        );
+
+        assertEquals(2, listed.size(), "the reported size must count every enforcing entry");
+        assertTrue(listed.contains("Griefer"));
+        assertTrue(listed.contains("Renamed (" + LISTED_UUID + ")"));
+    }
+
+    // Checks the same holds in uuid mode, where a plain name entry bans but the mode-scoped listing omitted it
+    @Test
+    void blacklistListing_showsBothStores_inUuidMode(@TempDir Path tempDir)
+        throws Exception {
+        WhitelistManager manager = managerWith(
+            tempDir,
+            "uuid",
+            "blacklist.yml",
+            "names:",
+            "  - Griefer",
+            "uuids:",
+            "  - " + LISTED_UUID
+        );
+
+        List<String> listed = manager.getValuesForListing(
+            manager.getBlacklist()
+        );
+
+        assertEquals(2, listed.size());
+        assertTrue(listed.contains("Griefer"));
+        assertTrue(listed.contains(LISTED_UUID.toString()));
+    }
+
+    // Checks the allow list keeps its mode-scoped listing, which reports exactly what the strict matcher consults
+    @Test
+    void whitelistListing_staysScopedToTheIdentifyMode(@TempDir Path tempDir)
+        throws Exception {
+        WhitelistManager manager = managerWith(
+            tempDir,
+            "name",
+            "whitelist.yml",
+            "names:",
+            "  - Notch",
+            "uuids:",
+            "  - " + LISTED_UUID + ": Ignored"
+        );
+
+        assertIterableEquals(
+            List.of("Notch"),
+            manager.getValuesForListing(manager.getWhitelist())
         );
     }
 
