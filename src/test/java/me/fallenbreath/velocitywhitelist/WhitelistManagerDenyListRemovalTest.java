@@ -7,12 +7,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.velocitypowered.api.command.CommandSource;
+import com.velocitypowered.api.proxy.Player;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.config.ProxyConfig;
 import com.velocitypowered.api.util.GameProfile;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import me.fallenbreath.velocitywhitelist.config.Configuration;
 import me.fallenbreath.velocitywhitelist.config.PlayerList;
@@ -32,7 +34,18 @@ class WhitelistManagerDenyListRemovalTest {
         "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     );
 
+    // Pairs the manager with the server mock behind it, for the cases that need a player to be connected
+    private record Fixture(WhitelistManager manager, ProxyServer server) {}
+
     private static WhitelistManager managerWith(
+        Path tempDir,
+        String identifyMode,
+        String... blacklistLines
+    ) throws Exception {
+        return fixtureWith(tempDir, identifyMode, blacklistLines).manager();
+    }
+
+    private static Fixture fixtureWith(
         Path tempDir,
         String identifyMode,
         String... blacklistLines
@@ -77,7 +90,7 @@ class WhitelistManagerDenyListRemovalTest {
             server
         );
         assertTrue(manager.loadLists());
-        return manager;
+        return new Fixture(manager, server);
     }
 
     private static GameProfile profile(UUID uuid, String name) {
@@ -226,6 +239,45 @@ class WhitelistManagerDenyListRemovalTest {
         );
         assertTrue(blacklist.getPlayerNames().isEmpty());
         assertTrue(blacklist.getPlayerUuidMappingEntries().isEmpty());
+    }
+
+    // Checks a removal by uuid clears the same entries whether or not the player is connected, the connected case supplying a current name that differs from the stored label
+    @Test
+    void removesByUuid_clearsTheStaleLabel_whenThePlayerIsOnline(
+        @TempDir Path tempDir
+    ) throws Exception {
+        Fixture fixture = fixtureWith(
+            tempDir,
+            "uuid",
+            "names:",
+            "  - OldName",
+            "uuids:",
+            "  - " + LISTED_UUID + ": OldName"
+        );
+        WhitelistManager manager = fixture.manager();
+
+        // Connects the banned account under a new name, the path that supplies resolveDenyListTarget with a name unlike the stored label
+        Player player = mock(Player.class);
+        when(player.getGameProfile()).thenReturn(
+            profile(LISTED_UUID, "NewName")
+        );
+        when(fixture.server().getPlayer(LISTED_UUID)).thenReturn(
+            Optional.of(player)
+        );
+
+        assertEquals(
+            WhitelistManager.ModifyResult.SUCCESS,
+            manager.removePlayer(
+                mock(CommandSource.class),
+                manager.getBlacklist(),
+                LISTED_UUID.toString()
+            )
+        );
+        assertFalse(
+            manager.isPlayerInBlacklist(profile(UUID.randomUUID(), "OldName")),
+            "the stale name entry must not survive a removal just because the player was connected"
+        );
+        assertTrue(manager.getBlacklist().getPlayerNames().isEmpty());
     }
 
     // Checks an unlisted player still reports no change rather than being swept up by the widened removal

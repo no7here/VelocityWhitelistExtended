@@ -278,6 +278,30 @@ class PlayerListNameIndexTest {
         assertFalse(list.checkAnyIdentifier(sibling, null));
     }
 
+    // Checks a rename does not strand the old ban, the current name and the stored label both being swept rather than one standing in for the other
+    @Test
+    void removeAnyIdentifier_sweepsTheCurrentNameAndTheStoredLabel(
+        @TempDir Path tempDir
+    ) throws Exception {
+        UUID renamed = UUID.fromString("11111111-2222-3333-4444-555555555555");
+        UUID sibling = UUID.fromString("99999999-8888-7777-6666-555555555555");
+
+        PlayerList list = loadedFrom(tempDir, LOGGER, "OldName", "NewName");
+        list.putPlayerUUID(renamed, "OldName");
+        list.putPlayerUUID(sibling, "oldname");
+
+        var removed = list.removeAnyIdentifier(renamed, "NewName");
+
+        assertTrue(removed.names().contains("NewName"));
+        assertTrue(
+            removed.names().contains("OldName"),
+            "the stale label must be swept even though a current name was supplied"
+        );
+        assertEquals(2, removed.uuids().size());
+        assertFalse(list.checkAnyIdentifier(null, "OldName"));
+        assertFalse(list.checkAnyIdentifier(sibling, "NewName"));
+    }
+
     // Checks the sweep is skipped for a bare uuid entry, which carries no label to widen on
     @Test
     void removeAnyIdentifier_byUuid_leavesUnrelatedNamesAlone(

@@ -209,7 +209,8 @@ public class PlayerList implements YamlStoredList<PlayerList> {
 
     /**
      * Removes every identifier this list holds for a profile: the uuid key itself, every stored
-     * spelling of the name and every uuid entry carrying that name as its label.
+     * spelling of the name it is known by, the label recorded against that uuid, and every uuid
+     * entry carrying either name as its label.
      *
      * Mirrors checkAnyIdentifier so that anything able to make this list match is also something a
      * removal can lift. Without it a deny-list entry the command cannot reach keeps banning a player
@@ -225,34 +226,34 @@ public class PlayerList implements YamlStoredList<PlayerList> {
         synchronized (this.lock) {
             List<Map.Entry<UUID, @Nullable String>> uuidsToRemove =
                 Lists.newArrayList();
-            String sweepName = name;
+            Set<String> sweepNames = Sets.newLinkedHashSet();
+            if (name != null) {
+                sweepNames.add(normaliseName(name));
+            }
             if (uuid != null && this.uuids.containsKey(uuid)) {
                 String label = this.uuids.get(uuid);
                 uuidsToRemove.add(Maps.immutableEntry(uuid, label));
-                // Falls back to the matched entry's own label, since a removal by raw uuid for an offline player carries no name and would otherwise leave a same-named entry behind still banning them
-                if (sweepName == null) {
-                    sweepName = label;
+                // Sweeps the matched entry's stored label alongside the name passed in, the two differing after a rename, so what a removal clears never depends on whether the player happens to be online
+                if (label != null) {
+                    sweepNames.add(normaliseName(label));
                 }
             }
 
-            ImmutableList<String> namesToRemove = ImmutableList.of();
-            if (sweepName != null) {
-                String normalised = normaliseName(sweepName);
+            List<String> namesToRemove = Lists.newArrayList();
+            for (String normalised : sweepNames) {
                 // Copies out of the multimap's live view before mutating anything below
-                namesToRemove = ImmutableList.copyOf(
-                    this.nameIndex.get(normalised)
-                );
-                for (Map.Entry<UUID, String> entry : this.uuids.entrySet()) {
-                    // Skips a uuid already collected above so a failed save does not restore it twice
-                    if (
-                        entry.getValue() != null &&
-                        !entry.getKey().equals(uuid) &&
-                        normaliseName(entry.getValue()).equals(normalised)
-                    ) {
-                        uuidsToRemove.add(
-                            Maps.immutableEntry(entry.getKey(), entry.getValue())
-                        );
-                    }
+                namesToRemove.addAll(this.nameIndex.get(normalised));
+            }
+            for (Map.Entry<UUID, String> entry : this.uuids.entrySet()) {
+                // Skips a uuid already collected above so a failed save does not restore it twice
+                if (
+                    entry.getValue() != null &&
+                    !entry.getKey().equals(uuid) &&
+                    sweepNames.contains(normaliseName(entry.getValue()))
+                ) {
+                    uuidsToRemove.add(
+                        Maps.immutableEntry(entry.getKey(), entry.getValue())
+                    );
                 }
             }
 
@@ -265,7 +266,7 @@ public class PlayerList implements YamlStoredList<PlayerList> {
             }
 
             return new RemovedIdentifiers(
-                namesToRemove,
+                ImmutableList.copyOf(namesToRemove),
                 ImmutableList.copyOf(uuidsToRemove)
             );
         }
